@@ -25,8 +25,7 @@ import numpy as np
 import tokenization
 import tensorflow as tf
 
-from masking import create_geometric_masked_lm_predictions, create_masked_lm_predictions, \
-    create_recurring_span_selection_predictions
+from masking import create_recurring_span_selection_predictions
 
 flags = tf.flags
 
@@ -81,6 +80,7 @@ class TrainingInstance(object):
         self.masked_span_positions = masked_span_positions
         self.masked_span_tokens = masked_span_tokens
         self.input_mask = input_mask
+        print(self.__str__())
 
     def __str__(self):
         s = ""
@@ -149,8 +149,8 @@ def write_instance_to_example_files(instances, tokenizer, max_seq_length,
         features["masked_span_weights"] = create_float_feature(masked_span_weights)
         # MS according to google: For multidimensional arrays, you can only convert them to bytes before they can be passed to Feature.
         # https://www.programmersought.com/article/68191448804/
-        # TODO check how to load this back..
-        features["masked_span_ids"] = create_bytes_feature(np.array(masked_span_ids).tostring())
+        # TODO check how to load back the list from the bytes object..
+        features["masked_span_ids"] = create_bytes_feature(bytes(str(masked_span_ids),encoding='latin1'))
 
         tf_example = tf.train.Example(features=tf.train.Features(feature=features))
 
@@ -374,12 +374,6 @@ def main(_):
     rng = random.Random(FLAGS.random_seed)
 
     length_dist, lengths = None, None
-    if FLAGS.geometric_masking_p > 0:
-        p = FLAGS.geometric_masking_p
-        lower, upper = 1, FLAGS.max_span_length
-        lengths = list(range(lower, upper + 1))
-        length_dist = [p * (1 - p) ** (i - lower) for i in range(lower, upper + 1)] if p >= 0 else None
-        length_dist = [x / (sum(length_dist)) for x in length_dist]
 
     params = [(file, get_output_file(file, FLAGS.output_dir), tokenizer, rng, length_dist, lengths)
               for file in input_files]

@@ -1,6 +1,6 @@
 python create_pretraining_data.py \
---input_file=/home/yandex/AMNLP2021/sehaik/AMNLP-pro/test/wiki_data \
---output_dir=/home/yandex/AMNLP2021/sehaik/AMNLP-pro/test/out \
+--input_file=/home/yandex/AMNLP2021/sehaik/AMNLP-proj/test/wiki_data \
+--output_dir=/home/yandex/AMNLP2021/sehaik/AMNLP-proj/test/out \
 --vocab_file=vocabs/bert-cased-vocab.txt \
 --do_lower_case=False \
 --do_whole_word_mask=False \

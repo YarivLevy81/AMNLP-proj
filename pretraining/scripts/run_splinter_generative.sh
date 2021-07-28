@@ -1,12 +1,12 @@
 python run_pretraining.py \
---input_file=$INPUT_FILE \
---output_dir=$OUTPUT_DIR \
+--input_file=/home/yandex/AMNLP2021/sehaik/AMNLP-proj/test/out \
+--output_dir=/home/yandex/AMNLP2021/sehaik/AMNLP-proj/test/pretrain_out \
 --max_seq_length=512 \
 --max_questions_per_seq=30 \
 --do_train \
 --train_batch_size=256 \
 --learning_rate=1e-4 \
---num_train_steps=2400000 \
---num_warmup_steps=10000 \
---save_checkpoints_steps=10000 \
+--num_train_steps=100 \
+--num_warmup_steps=10 \
+--save_checkpoints_steps=1 \
 --keep_checkpoint_max=240 

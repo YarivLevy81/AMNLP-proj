@@ -19,7 +19,7 @@ import collections
 import random
 import time
 from multiprocessing import Pool
-
+import pickle
 import numpy as np
 
 import tokenization
@@ -90,8 +90,7 @@ class TrainingInstance(object):
             [str(x) for x in self.masked_span_positions]))
         s += "input_mask: %s\n" % (" ".join(
             [str(x) for x in self.input_mask]))
-        s += "masked_span_tokens: %s\n" % (", ".join(
-            [" ".join(x) for x in self.masked_span_tokens]))
+        s += "masked_span_tokens: %s\n" % (" ".join(self.masked_span_tokens))
 
         s += "\n"
         return s
@@ -137,20 +136,18 @@ def write_instance_to_example_files(instances, tokenizer, max_seq_length,
         features["input_mask"] = create_int_feature(input_mask)
 
         masked_span_positions = list(instance.masked_span_positions)
-        masked_span_ids = list([tokenizer.convert_tokens_to_ids(x) for x in instance.masked_span_tokens])
         masked_span_weights = [1.0] * len(masked_span_positions)
+        masked_span_ids = tokenizer.convert_tokens_to_ids(instance.masked_span_tokens)
 
-        while len(masked_span_positions) < max_questions_per_seq:
-            masked_span_positions.append(0)
-            masked_span_ids.append([0]) # FIXME MS - I am not sure about this but [0] = ['[PAD]'] according to vocab..
-            masked_span_weights.append(0.0)
+        #while len(masked_span_positions) < max_questions_per_seq:
+        #    masked_span_positions.append(0)
+        #    masked_span_ids += [0, 1]
+        #    masked_span_weights.append(0.0)
 
         features["masked_span_positions"] = create_int_feature(masked_span_positions)
         features["masked_span_weights"] = create_float_feature(masked_span_weights)
-        # MS according to google: For multidimensional arrays, you can only convert them to bytes before they can be passed to Feature.
-        # https://www.programmersought.com/article/68191448804/
-        # TODO check how to load back the list from the bytes object..
-        features["masked_span_ids"] = create_bytes_feature(bytes(str(masked_span_ids),encoding='latin1'))
+        print(masked_span_ids)
+        features["masked_span_ids"] = create_int_feature(masked_span_ids)
 
         tf_example = tf.train.Example(features=tf.train.Features(feature=features))
 
@@ -292,7 +289,7 @@ def create_instances_from_document(
     """Creates `TrainingInstance`s for a single document."""
     document = all_documents[document_index]
 
-    # Account for [CLS], [SEP]
+    # Account for <pad> </s>
     max_num_tokens = max_seq_length - 2
 
     instances = []

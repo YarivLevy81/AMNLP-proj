@@ -171,7 +171,7 @@ def create_recurring_span_selection_predictions(tokens, max_recurring_prediction
                 is_first_token = True
                 for j in _iterate_span_indices(span):
                     if is_first_token:
-                        new_tokens[j] = "[QUESTION]"
+                        new_tokens[j] = f"[unused{len(masked_spans)+1}]"
                         masked_spans.append(MaskedSpanInstance(index=j,
                                                                begin_label=unmasked_span_beginning,
                                                                end_label=unmasked_span_ending))
@@ -191,8 +191,8 @@ def create_recurring_span_selection_predictions(tokens, max_recurring_prediction
 
     masked_span_positions = []
     span_label_tokens = []
-    for p in masked_spans:
+    for j, p in enumerate(masked_spans):
         masked_span_positions.append(p.index)
-        span_label_tokens.append(new_tokens[p.begin_label:p.end_label+1])
+        span_label_tokens = span_label_tokens + [f"[unused{j+1}]"] + new_tokens[p.begin_label:p.end_label+1]
 
     return new_tokens, masked_span_positions, input_mask, span_label_tokens, span_clusters

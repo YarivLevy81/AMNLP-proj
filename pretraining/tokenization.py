@@ -22,7 +22,8 @@ import collections
 import re
 import unicodedata
 import six
-import tensorflow as tf
+import tensorflow
+tf = tensorflow.compat.v1
 
 SPECIAL_TOKENS = {'[PAD]', '[UNK]', '[CLS]', '[SEP]', '[MASK]', '[SPAN_MASK]'}
 

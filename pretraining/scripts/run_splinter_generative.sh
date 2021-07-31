@@ -1,10 +1,10 @@
 python run_pretraining.py \
---input_file=/home/yandex/AMNLP2021/sehaik/AMNLP-proj/test/out \
+--input_file=/home/yandex/AMNLP2021/sehaik/AMNLP-proj/test/out/test_wiki_data.tfrecord \
 --output_dir=/home/yandex/AMNLP2021/sehaik/AMNLP-proj/test/pretrain_out \
 --max_seq_length=512 \
 --max_questions_per_seq=30 \
 --do_train \
---train_batch_size=256 \
+--train_batch_size=1 \
 --learning_rate=1e-4 \
 --num_train_steps=100 \
 --num_warmup_steps=10 \

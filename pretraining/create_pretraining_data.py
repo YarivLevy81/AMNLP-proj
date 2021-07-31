@@ -23,7 +23,8 @@ import pickle
 import numpy as np
 
 import tokenization
-import tensorflow as tf
+import tensorflow
+tf = tensorflow.compat.v1
 
 from masking import create_recurring_span_selection_predictions
 
@@ -77,7 +78,7 @@ class TrainingInstance(object):
 
     def __init__(self, tokens, masked_span_positions=None, masked_span_tokens=None, input_mask=None):
         self.tokens = tokens
-        self.masked_span_positions = masked_span_positions
+        self.masked_span_positions = masked_span_positions # FIXME - we don't use positions, can delete?
         self.masked_span_tokens = masked_span_tokens
         self.input_mask = input_mask
         print(self.__str__())
@@ -132,21 +133,21 @@ def write_instance_to_example_files(instances, tokenizer, max_seq_length,
         assert len(input_mask) == max_seq_length
 
         features = collections.OrderedDict()
+        print('len(input_ids):', len(input_ids))
         features["input_ids"] = create_int_feature(input_ids)
+        print('len(input_mask):', len(input_mask))
         features["input_mask"] = create_int_feature(input_mask)
 
         masked_span_positions = list(instance.masked_span_positions)
-        masked_span_weights = [1.0] * len(masked_span_positions)
         masked_span_ids = tokenizer.convert_tokens_to_ids(instance.masked_span_tokens)
 
         #while len(masked_span_positions) < max_questions_per_seq:
         #    masked_span_positions.append(0)
         #    masked_span_ids += [0, 1]
-        #    masked_span_weights.append(0.0)
 
+        print('masked_span_positions:', masked_span_positions)
         features["masked_span_positions"] = create_int_feature(masked_span_positions)
-        features["masked_span_weights"] = create_float_feature(masked_span_weights)
-        print(masked_span_ids)
+        print('masked_span_ids: ', masked_span_ids)
         features["masked_span_ids"] = create_int_feature(masked_span_ids)
 
         tf_example = tf.train.Example(features=tf.train.Features(feature=features))

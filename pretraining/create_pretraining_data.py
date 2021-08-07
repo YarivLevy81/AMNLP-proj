@@ -55,6 +55,8 @@ flags.DEFINE_integer("max_questions_per_seq", 30, "")
 
 flags.DEFINE_integer("max_seq_length", 512, "Maximum sequence length.")
 
+flags.DEFINE_integer("max_label_length", 512, "Maximum masked_span_ids length.")
+
 flags.DEFINE_integer("max_predictions_per_seq", 80,
                      "Maximum number of masked LM predictions per sequence.")
 
@@ -133,9 +135,9 @@ def write_instance_to_example_files(instances, tokenizer, max_seq_length,
         assert len(input_mask) == max_seq_length
 
         features = collections.OrderedDict()
-        print('len(input_ids):', len(input_ids))
+        #print('len(input_ids):', len(input_ids))
         features["input_ids"] = create_int_feature(input_ids)
-        print('len(input_mask):', len(input_mask))
+        #print('len(input_mask):', len(input_mask))
         features["input_mask"] = create_int_feature(input_mask)
 
         masked_span_positions = list(instance.masked_span_positions)
@@ -145,9 +147,11 @@ def write_instance_to_example_files(instances, tokenizer, max_seq_length,
         #    masked_span_positions.append(0)
         #    masked_span_ids += [0, 1]
 
-        print('masked_span_positions:', masked_span_positions)
+        masked_span_ids += [0]*(FLAGS.max_label_length-len(masked_span_ids)) #FIXME
+
+        #print('masked_span_positions:', masked_span_positions)
         features["masked_span_positions"] = create_int_feature(masked_span_positions)
-        print('masked_span_ids: ', masked_span_ids)
+        #print('masked_span_ids: ', masked_span_ids)
         features["masked_span_ids"] = create_int_feature(masked_span_ids)
 
         tf_example = tf.train.Example(features=tf.train.Features(feature=features))

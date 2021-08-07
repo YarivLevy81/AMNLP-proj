@@ -21,6 +21,7 @@ from __future__ import print_function
 import os
 import optimization
 import tensorflow
+
 tf = tensorflow.compat.v1
 
 from transformers import TFT5ForConditionalGeneration, T5Config
@@ -78,34 +79,8 @@ flags.DEFINE_integer("iterations_per_loop", 1000,
 
 flags.DEFINE_integer("max_eval_steps", 100, "Maximum number of eval steps.")
 
-flags.DEFINE_bool("use_tpu", False, "Whether to use TPU or GPU/CPU.")
-
-flags.DEFINE_string(
-    "tpu_name", None,
-    "The Cloud TPU to use for training. This should be either the name "
-    "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
-    "url.")
-
-flags.DEFINE_string(
-    "tpu_zone", None,
-    "[Optional] GCE zone where the Cloud TPU is located in. If not "
-    "specified, we will attempt to automatically detect the GCE project from "
-    "metadata.")
-
-flags.DEFINE_string(
-    "gcp_project", None,
-    "[Optional] Project name for the Cloud TPU-enabled project. If not "
-    "specified, we will attempt to automatically detect the GCE project from "
-    "metadata.")
-
-flags.DEFINE_string("master", None, "[Optional] TensorFlow master URL.")
-
-flags.DEFINE_integer(
-    "num_tpu_cores", 8,
-    "Only used if `use_tpu` is True. Total number of TPU cores to use.")
-
 def model_fn_builder(init_checkpoint, learning_rate,
-                     num_train_steps, num_warmup_steps, use_tpu):
+                            num_train_steps, num_warmup_steps, model_dir, save_summary_steps):
     """Returns `model_fn` closure for TPUEstimator."""
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
@@ -118,9 +93,9 @@ def model_fn_builder(init_checkpoint, learning_rate,
         input_ids = features["input_ids"]
         input_mask = features["input_mask"]
 
-        # FIXME - model should not be pretrained
-        #model = TFT5ForConditionalGeneration(T5Config)
-        model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
+        config = T5Config(decoder_start_token_id=0, #pad_token_id=0
+                          vocab_size=28996)
+        model = TFT5ForConditionalGeneration(config)
 
         masked_span_ids = features["masked_span_ids"]
 
@@ -131,19 +106,10 @@ def model_fn_builder(init_checkpoint, learning_rate,
         tvars = tf.trainable_variables()
 
         initialized_variable_names = {}
-        scaffold_fn = None
         if init_checkpoint:
             (assignment_map, initialized_variable_names
              ) = modeling.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
-            if use_tpu:
-
-                def tpu_scaffold():
-                    tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
-                    return tf.train.Scaffold()
-
-                scaffold_fn = tpu_scaffold
-            else:
-                tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
+            tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
 
         tf.logging.info("**** Trainable Variables ****")
         for var in tvars:
@@ -155,16 +121,30 @@ def model_fn_builder(init_checkpoint, learning_rate,
 
         output_spec = None
         if mode == tf.estimator.ModeKeys.TRAIN:
-            train_op = optimization.create_optimizer(
-                total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
+            summary_hook = tf.train.SummarySaverHook(
+                save_steps=save_summary_steps,
+                output_dir=os.path.join(model_dir, "train"),
+                summary_op=tf.summary.scalar('loss', total_loss))
 
-            output_spec = tf.estimator.tpu.TPUEstimatorSpec(
+            train_op = optimization.create_optimizer(
+                total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu=False)
+
+            output_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
                 loss=total_loss,
                 train_op=train_op,
-                scaffold_fn=scaffold_fn)
+                training_hooks=[summary_hook])
         elif mode == tf.estimator.ModeKeys.EVAL:
-            raise ValueError("EVAL mode not supported: %s" % (mode))
+            summary_hook = tf.train.SummarySaverHook(
+                save_steps=1, # TODO check
+                output_dir=os.path.join(model_dir, "eval"),
+                summary_op=tf.summary.scalar('loss', total_loss))
+
+            output_spec = tf.estimator.EstimatorSpec(
+                mode=mode,
+                loss=total_loss,
+                #eval_metric_ops={}, # this is usefull for F1 score
+                evaluation_hooks=[summary_hook])
         else:
             raise ValueError("Only TRAIN and EVAL modes are supported: %s" % (mode))
 
@@ -172,15 +152,16 @@ def model_fn_builder(init_checkpoint, learning_rate,
 
     return model_fn
 
+
 def input_fn_builder(input_files,
                      max_seq_length,
                      is_training,
+                     batch_size,
                      num_cpu_threads=4):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
 
     def input_fn(params):
         """The actual input function."""
-        batch_size = params["batch_size"]
 
         name_to_features = dict()
         name_to_features["input_ids"] = tf.FixedLenFeature([max_seq_length], tf.int64)
@@ -206,10 +187,8 @@ def input_fn_builder(input_files,
                     cycle_length=cycle_length))
             d = d.shuffle(buffer_size=100)
         else:
-            d = tf.data.TFRecordDataset(input_files)
-            # Since we evaluate for a fixed number of steps we don't want to encounter
-            # out-of-range exceptions.
-            d = d.repeat()
+            # For eval we want out-of-range exceptions.
+            d = tf.data.TFRecordDataset(tf.constant(input_files))
 
         # We must `drop_remainder` on training because the TPU requires fixed
         # size dimensions. For eval, we assume we are evaluating on the CPU or GPU
@@ -225,6 +204,7 @@ def input_fn_builder(input_files,
 
     return input_fn
 
+
 def _decode_record(record, name_to_features):
     """Decodes a record to a TensorFlow example."""
     example = tf.parse_single_example(record, name_to_features)
@@ -238,6 +218,7 @@ def _decode_record(record, name_to_features):
         example[name] = t
 
     return example
+
 
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
@@ -255,66 +236,49 @@ def main(_):
     for input_file in input_files:
         tf.logging.info("  %s" % input_file)
 
-    tpu_cluster_resolver = None
-    if FLAGS.use_tpu and FLAGS.tpu_name:
-        tpu_cluster_resolver = tf.estimator.cluster_resolver.TPUClusterResolver(
-            FLAGS.tpu_name, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
-
-    is_per_host = tf.estimator.tpu.InputPipelineConfig.PER_HOST_V2
-    run_config = tf.estimator.tpu.RunConfig(
-        cluster=tpu_cluster_resolver,
-        master=FLAGS.master,
+    run_config = tf.estimator.RunConfig(
         model_dir=FLAGS.output_dir,
         save_checkpoints_steps=FLAGS.save_checkpoints_steps,
-        keep_checkpoint_max=FLAGS.keep_checkpoint_max,
-        tpu_config=tf.estimator.tpu.TPUConfig(
-            iterations_per_loop=FLAGS.iterations_per_loop,
-            num_shards=FLAGS.num_tpu_cores,
-            per_host_input_for_training=is_per_host))
+        keep_checkpoint_max=FLAGS.keep_checkpoint_max)
 
     model_fn = model_fn_builder(
         init_checkpoint=FLAGS.init_checkpoint,
         learning_rate=FLAGS.learning_rate,
         num_train_steps=FLAGS.num_train_steps,
         num_warmup_steps=FLAGS.num_warmup_steps,
-        use_tpu=FLAGS.use_tpu)
+        model_dir=FLAGS.output_dir,
+        save_summary_steps=FLAGS.save_checkpoints_steps) # this is on purpose save_checkpoints_steps
 
-    # If TPU is not available, this will fall back to normal Estimator on CPU
-    # or GPU.
-    estimator = tf.estimator.tpu.TPUEstimator(
-        use_tpu=FLAGS.use_tpu,
+    # Normal Estimator on CPU or GPU.
+    estimator = tf.estimator.Estimator(
         model_fn=model_fn,
-        config=run_config,
-        train_batch_size=FLAGS.train_batch_size,
-        eval_batch_size=FLAGS.eval_batch_size)
+        config=run_config)
 
-    if FLAGS.do_train:
-        tf.logging.info("***** Running training *****")
-        tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
-        train_input_fn = input_fn_builder(
-            input_files=input_files,
-            max_seq_length=FLAGS.max_seq_length,
-            is_training=True)
-        estimator.train(input_fn=train_input_fn, max_steps=FLAGS.num_train_steps)
+    train_input_fn = input_fn_builder(
+        input_files=input_files,
+        batch_size=FLAGS.train_batch_size,
+        max_seq_length=FLAGS.max_seq_length,
+        is_training=True)
 
-    if FLAGS.do_eval:
-        tf.logging.info("***** Running evaluation *****")
-        tf.logging.info("  Batch size = %d", FLAGS.eval_batch_size)
+    eval_input_fn = input_fn_builder(
+        input_files=input_files,
+        batch_size=FLAGS.train_batch_size, # this is on purpose train_batch_size
+        max_seq_length=FLAGS.max_seq_length,
+        is_training=False)
 
-        eval_input_fn = input_fn_builder(
-            input_files=input_files,
-            max_seq_length=FLAGS.max_seq_length,
-            is_training=False)
+    # setup train spec
+    train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn,
+                                        max_steps=FLAGS.num_train_steps)
 
-        result = estimator.evaluate(
-            input_fn=eval_input_fn, steps=FLAGS.max_eval_steps)
+    # setup eval spec evaluating every checkpoint
+    eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn)
 
-        output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
-        with tf.gfile.GFile(output_eval_file, "w") as writer:
-            tf.logging.info("***** Eval results *****")
-            for key in sorted(result.keys()):
-                tf.logging.info("  %s = %s", key, str(result[key]))
-                writer.write("%s = %s\n" % (key, str(result[key])))
+    tf.logging.info("***** Running training *****")
+    tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
+
+    # run train and evaluate
+    result = tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
+    print('result:', result)
 
 
 if __name__ == "__main__":

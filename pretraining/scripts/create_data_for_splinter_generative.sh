@@ -1,11 +1,12 @@
 python create_pretraining_data.py \
---input_file=/home/yandex/AMNLP2021/sehaik/AMNLP-proj/test/wiki_data \
---output_dir=/home/yandex/AMNLP2021/sehaik/AMNLP-proj/test/out \
+--input_file=/home/yandex/AMNLP2021/data/wiki/all \
+--output_dir=/home/yandex/AMNLP2021/sehaik/processed_wiki_data/ \
 --vocab_file=vocabs/bert-cased-vocab.txt \
 --do_lower_case=False \
 --do_whole_word_mask=False \
 --max_seq_length=512 \
---num_processes=1 \
+--max_label_length=512 \
+--num_processes=16 \
 --dupe_factor=5 \
 --max_span_length=10 \
 --max_questions_per_seq=30

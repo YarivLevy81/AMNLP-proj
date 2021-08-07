@@ -5,8 +5,9 @@ python run_pretraining.py \
 --max_questions_per_seq=30 \
 --do_train \
 --train_batch_size=1 \
+--eval_batch_size=1 \
 --learning_rate=1e-4 \
---num_train_steps=100 \
---num_warmup_steps=10 \
+--num_train_steps=2 \
+--num_warmup_steps=1 \
 --save_checkpoints_steps=1 \
 --keep_checkpoint_max=240 

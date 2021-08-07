@@ -1,6 +1,6 @@
 python run_pretraining.py \
 --input_file=/home/yandex/AMNLP2021/sehaik/AMNLP-proj/test/out/test_wiki_data.tfrecord \
---output_dir=/home/yandex/AMNLP2021/sehaik/AMNLP-proj/test/pretrain_out \
+--output_dir=/home/yandex/AMNLP2021/roieliyaub/AMNLP-proj/test/pretrain_out \
 --max_seq_length=512 \
 --max_questions_per_seq=30 \
 --do_train \

@@ -93,7 +93,11 @@ def model_fn_builder(init_checkpoint, learning_rate,
         input_ids = features["input_ids"]
         input_mask = features["input_mask"]
 
-        config = T5Config(decoder_start_token_id=0, #pad_token_id=0
+        config = T5Config(pad_token_id=0, #[PAD]
+                          eos_token_id=102, # [SEP]
+                          bos_token_id=101, # [CLS]
+                          decoder_start_token_id=0, # [PAD]
+                          sep_token_id=102, #[SEP]
                           vocab_size=28996)
         model = TFT5ForConditionalGeneration(config)
 
@@ -166,7 +170,7 @@ def input_fn_builder(input_files,
         name_to_features = dict()
         name_to_features["input_ids"] = tf.FixedLenFeature([max_seq_length], tf.int64)
         name_to_features["input_mask"] = tf.FixedLenFeature([max_seq_length], tf.int64)
-        name_to_features["masked_span_ids"] = tf.FixedLenSequenceFeature([], tf.int64, allow_missing=True)
+        name_to_features["masked_span_ids"] = tf.FixedLenFeature([max_seq_length], tf.int64)
 
         # For training, we want a lot of parallel reading and shuffling.
         # For eval, we want no shuffling and parallel reading doesn't matter.

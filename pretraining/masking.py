@@ -191,8 +191,11 @@ def create_recurring_span_selection_predictions(tokens, max_recurring_prediction
 
     masked_span_positions = []
     span_label_tokens = []
+    last = 0
     for j, p in enumerate(masked_spans):
         masked_span_positions.append(p.index)
         span_label_tokens = span_label_tokens + [f"[unused{j+1}]"] + new_tokens[p.begin_label:p.end_label+1]
+        last = j
+    span_label_tokens = span_label_tokens + [f"[unused{last+1}]"] + ["[SEP]"]
 
     return new_tokens, masked_span_positions, input_mask, span_label_tokens, span_clusters

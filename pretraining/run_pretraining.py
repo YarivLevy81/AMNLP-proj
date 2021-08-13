@@ -30,7 +30,11 @@ flags = tf.flags
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string(
-    "input_file", None,
+    "train_input_file", None,
+    "Input TF example files (can be a glob or comma separated).")
+
+flags.DEFINE_string(
+    "validation_input_file", None,
     "Input TF example files (can be a glob or comma separated).")
 
 flags.DEFINE_string(
@@ -232,12 +236,21 @@ def main(_):
 
     tf.gfile.MakeDirs(FLAGS.output_dir)
 
-    input_files = []
-    for input_pattern in FLAGS.input_file.split(","):
-        input_files.extend(tf.gfile.Glob(input_pattern))
+    train_input_files = []
+    for input_pattern in FLAGS.train_input_file.split(","):
+        train_input_files.extend(tf.gfile.Glob(input_pattern))
 
-    tf.logging.info("*** Input Files ***")
-    for input_file in input_files:
+    val_input_files = []
+    for input_pattern in FLAGS.validation_input_file.split(","):
+        val_input_files.extend(tf.gfile.Glob(input_pattern))
+
+
+    tf.logging.info("*** Train Input Files ***")
+    for input_file in train_input_files:
+        tf.logging.info("  %s" % input_file)
+
+    tf.logging.info("*** Validation Input Files ***")
+    for input_file in val_input_files:
         tf.logging.info("  %s" % input_file)
 
     run_config = tf.estimator.RunConfig(
@@ -259,13 +272,13 @@ def main(_):
         config=run_config)
 
     train_input_fn = input_fn_builder(
-        input_files=input_files,
+        input_files=train_input_files,
         batch_size=FLAGS.train_batch_size,
         max_seq_length=FLAGS.max_seq_length,
         is_training=True)
 
     eval_input_fn = input_fn_builder(
-        input_files=input_files,
+        input_files=val_input_files,
         batch_size=FLAGS.train_batch_size, # this is on purpose train_batch_size
         max_seq_length=FLAGS.max_seq_length,
         is_training=False)
@@ -286,6 +299,7 @@ def main(_):
 
 
 if __name__ == "__main__":
-    flags.mark_flag_as_required("input_file")
+    flags.mark_flag_as_required("train_input_file")
+    flags.mark_flag_as_required("validation_input_file")
     flags.mark_flag_as_required("output_dir")
     tf.app.run()

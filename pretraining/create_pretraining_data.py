@@ -266,10 +266,11 @@ def create_training_instances(input_file, tokenizer, max_seq_length, dupe_factor
 
 
 def create_instance_from_context(segments, masked_lm_prob, max_predictions_per_seq, vocab_words, rng, length_dist=None, lengths=None, statistics=None, ngrams=None):
-    tokens = ["[CLS]"]
+    #tokens = ["[CLS]"]
+    tokens = []
     for segment in segments:
         tokens += segment
-    tokens.append("[SEP]")
+    #tokens.append("[SEP]")
 
 
     tokens, masked_span_positions, input_mask, span_label_tokens, span_clusters = \
@@ -295,7 +296,8 @@ def create_instances_from_document(
     document = all_documents[document_index]
 
     # Account for <pad> </s>
-    max_num_tokens = max_seq_length - 2
+    #max_num_tokens = max_seq_length - 2
+    max_num_tokens = max_seq_length
 
     instances = []
     current_chunk = []

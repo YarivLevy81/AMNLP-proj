@@ -1,13 +1,14 @@
 python run_pretraining.py \
---input_file=/home/yandex/AMNLP2021/sehaik/AMNLP-proj/test/out/test_wiki_data.tfrecord \
---output_dir=/home/yandex/AMNLP2021/sehaik/AMNLP-proj/test/pretrain_out \
+--train_input_file=/home/yandex/AMNLP2021/sehaik/processed_wiki_split/wiki_split_file_* \
+--validation_input_file=/home/yandex/AMNLP2021/sehaik/processed_wiki_val/wiki_split_file_* \
+--output_dir=/home/yandex/AMNLP2021/sehaik/pretrain_out \
 --max_seq_length=512 \
 --max_questions_per_seq=30 \
 --do_train \
---train_batch_size=4 \
---eval_batch_size=4 \
+--train_batch_size=256 \
+--eval_batch_size=16 \
 --learning_rate=1e-4 \
---num_train_steps=2 \
---num_warmup_steps=1 \
---save_checkpoints_steps=1 \
+--num_train_steps=2400000 \
+--num_warmup_steps=10000 \
+--save_checkpoints_steps=10000 \
 --keep_checkpoint_max=240 

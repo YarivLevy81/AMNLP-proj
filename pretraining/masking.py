@@ -171,7 +171,7 @@ def create_recurring_span_selection_predictions(tokens, max_recurring_prediction
                 is_first_token = True
                 for j in _iterate_span_indices(span):
                     if is_first_token:
-                        new_tokens[j] = f"[unused{len(masked_spans)+1}]"
+                        new_tokens[j] = "[unused]"
                         masked_spans.append(MaskedSpanInstance(index=j,
                                                                begin_label=unmasked_span_beginning,
                                                                end_label=unmasked_span_ending))
@@ -189,13 +189,21 @@ def create_recurring_span_selection_predictions(tokens, max_recurring_prediction
     assert len(masked_spans) <= num_to_predict
     masked_spans = sorted(masked_spans, key=lambda x: x.index)
 
+    j = 1
+    for i, token in enumerate(new_tokens):
+        if token == '[unused]':
+           new_tokens[i] = f'[unused{j}]'
+           j += 1
+
     masked_span_positions = []
     span_label_tokens = []
-    last = 0
+    if len(masked_spans) == 0:
+        print('skiping...')
+        return None, None, None, None, None
+
     for j, p in enumerate(masked_spans):
         masked_span_positions.append(p.index)
-        span_label_tokens = span_label_tokens + [f"[unused{j+1}]"] + new_tokens[p.begin_label:p.end_label+1]
-        last = j
-    span_label_tokens = span_label_tokens + [f"[unused{last+1}]"] + ["[SEP]"]
+        span_label_tokens = span_label_tokens + [f"[unused{j+1}]"] + tokens[p.begin_label:p.end_label + 1]
+    span_label_tokens = span_label_tokens + [f"[unused{len(masked_spans)}]"] + ["[SEP]"]
 
     return new_tokens, masked_span_positions, input_mask, span_label_tokens, span_clusters

@@ -124,8 +124,11 @@ def write_instance_to_example_files(instances, tokenizer, max_seq_length,
         input_ids = tokenizer.convert_tokens_to_ids(instance.tokens)
         input_len = len(input_ids)
         input_mask = [1] * input_len if instance.input_mask is None else instance.input_mask
-        assert input_len <= max_seq_length
-        assert input_len == len(input_mask)
+
+        if input_len > max_seq_length or input_len != len(input_mask):
+            continue
+        # assert input_len <= max_seq_length
+        #assert input_len == len(input_mask)
 
         while len(input_ids) < max_seq_length:
             input_ids.append(0)
@@ -147,7 +150,11 @@ def write_instance_to_example_files(instances, tokenizer, max_seq_length,
         #    masked_span_positions.append(0)
         #    masked_span_ids += [0, 1]
 
+        if len(masked_span_ids) > FLAGS.max_label_length:
+            continue
+        #assert len(masked_span_ids) <= FLAGS.max_label_length
         masked_span_ids += [0]*(FLAGS.max_label_length-len(masked_span_ids)) #FIXME
+        assert len(masked_span_ids) == FLAGS.max_label_length
 
         #print('masked_span_positions:', masked_span_positions)
         features["masked_span_positions"] = create_int_feature(masked_span_positions)
@@ -279,6 +286,8 @@ def create_instance_from_context(segments, masked_lm_prob, max_predictions_per_s
                                                     FLAGS.max_span_length,
                                                     masked_lm_prob,
                                                     ngrams)
+    if tokens is None:
+        return None
     statistics.ngrams.update([cluster[1] for cluster in span_clusters])
 
     statistics.num_contexts += 1
@@ -310,6 +319,8 @@ def create_instances_from_document(
                 current_chunk.append(segment[:max_num_tokens-current_length])
                 instance = create_instance_from_context(current_chunk, masked_lm_prob, max_predictions_per_seq,
                                                         vocab_words, rng, length_dist, lengths, statistics, ngrams)
+                if instance is None:
+                    continue
                 instances.append(instance)
 
             current_chunk, current_length = [], 0
@@ -327,7 +338,8 @@ def create_instances_from_document(
     if current_chunk:
         instance = create_instance_from_context(current_chunk, masked_lm_prob, max_predictions_per_seq,
                                                 vocab_words, rng, length_dist, lengths, statistics, ngrams)
-        instances.append(instance)
+        if instance is not None:
+            instances.append(instance)
 
     return instances
 

@@ -44,7 +44,7 @@ def process_file (data, tokenizer, path):
             answer_text = " ".join(
                 [c_t[0] for c_t in context_tokens[answer['token_spans'][0][0]: answer['token_spans'][0][1] + 1]])
 
-            tokens = tokens + question_tokens + [f"[unused{j+1}]"]
+            tokens = tokens + ['.'] + question_tokens + [f"[unused{j+1}]"]
             label = label + [f"[unused{j+1}]"] + tokenizer.tokenize(answer_text) # FIXME - add extra?
 
         example_path =  os.path.splitext(path)[0] + f"_{i}.tfrecord"

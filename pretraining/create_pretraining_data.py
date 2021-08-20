@@ -187,7 +187,8 @@ def write_instance_to_example_files(instances, tokenizer, max_seq_length,
     for writer in writers:
         writer.close()
 
-    tf.logging.info(f"Wrote {total_written} total instances, average length is {total_tokens_written // total_written}")
+    if total_written != 0:
+        tf.logging.info(f"Wrote {total_written} total instances, average length is {total_tokens_written // total_written}")
 
 
 def create_int_feature(values):

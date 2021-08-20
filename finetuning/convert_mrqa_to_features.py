@@ -46,7 +46,7 @@ def process_file (data, tokenizer, path):
 
             tokens = tokens + ['.'] + question_tokens + [f"[unused{j+1}]"]
             label = label + [f"[unused{j+1}]"] + tokenizer.tokenize(answer_text) # FIXME - add extra?
-
+        #TODO label += unused /s
         example_path =  os.path.splitext(path)[0] + f"_{i}.tfrecord"
         save_tfrecords(tokens, label, example_path, tokenizer)
         #print('tokens', tokens)
@@ -65,6 +65,7 @@ def save_tfrecords(tokens, label, example_path, tokenizer, max_length=512):
     input_mask = [1] * input_len
     assert input_len <= max_length
 
+    # TODO do like create_pretraining file
     while len(input_ids) < max_length:
         input_ids.append(0)
         input_mask.append(0)

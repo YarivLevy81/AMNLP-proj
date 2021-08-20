@@ -1,0 +1,14 @@
+python run_pretraining.py \
+--train_input_file=/home/yandex/AMNLP2021/sehaik/processed_wiki_split/wiki_split_file_* \
+--validation_input_file=/home/yandex/AMNLP2021/sehaik/processed_wiki_split/wiki_split_file_* \
+--output_dir=/home/yandex/AMNLP2021/yarivlevy/tst \
+--max_seq_length=512 \
+--max_questions_per_seq=30 \
+--do_train \
+--train_batch_size=4 \
+--eval_batch_size=1 \
+--learning_rate=1e-4 \
+--num_train_steps=5000000 \
+--num_warmup_steps=10000 \
+--save_checkpoints_steps=10000 \
+--keep_checkpoint_max=240 

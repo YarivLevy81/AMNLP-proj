@@ -127,7 +127,11 @@ def model_fn_builder(checkpoint, config_name, init_lr, gradient_accumulation_mul
                 output_dir=os.path.join(output_dir, "train"),
                 summary_op=tf.summary.scalar('loss', total_loss))
 
-            save_checkpoint_hook = lambda: model.save_pretrained(os.path.join(output_dir, "hf_checkpoint/"))
+            save_checkpoint_hook = tf.estimator.CheckpointSaverHook(
+                    checkpoint_dir="/home/yandex/AMNLP2021/yarivlevy/checkpoints",
+                    checkpoint_basename='model.ckpt',
+                    save_steps=FLAGS.save_checkpoints_steps,
+            )
 
             #https://github.com/hpandana/gradient-accumulation-tf-estimator/blob/master/another-example.py
             def _train_op_fn(loss): # TODO move to a file
@@ -191,11 +195,11 @@ def model_fn_builder(checkpoint, config_name, init_lr, gradient_accumulation_mul
                 # global_step is incremented here, regardless of the tf.cond branch
                 train_op = tf.group(train_op, [tf.assign_add(global_step, 1)])
                 return train_op
-
+            
             output_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
                 loss=total_loss,
-                train_op=_train_op_fn,
+                train_op=_train_op_fn(total_loss),
                 training_hooks=[summary_hook, save_checkpoint_hook])
         elif mode == tf.estimator.ModeKeys.EVAL:
             summary_hook = tf.train.SummarySaverHook(
@@ -306,10 +310,11 @@ def main(_):
         tf.logging.info("  %s" % input_file)
 
     run_config = tf.estimator.RunConfig(
-        output_dir=FLAGS.output_dir,
+        #output_dir=FLAGS.output_dir,
         save_checkpoints_steps=FLAGS.save_checkpoints_steps,
         keep_checkpoint_max=FLAGS.keep_checkpoint_max,
-        iterations_per_loop=FLAGS.iterations_per_loop)
+        #iterations_per_loop=FLAGS.iterations_per_loop
+    )
 
     model_fn = model_fn_builder(
         checkpoint=FLAGS.checkpoint,

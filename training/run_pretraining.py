@@ -19,12 +19,10 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import optimization
 import tensorflow
-
 tf = tensorflow.compat.v1
 
-from transformers import TFT5ForConditionalGeneration, T5Config
+from transformers import TFT5ForConditionalGeneration, AutoConfig, AdamW, get_scheduler
 
 flags = tf.flags
 FLAGS = flags.FLAGS
@@ -43,52 +41,66 @@ flags.DEFINE_string(
 
 ## Other parameters
 flags.DEFINE_string(
-    "init_checkpoint", None,
-    "Initial checkpoint (usually from a pre-trained BERT model).")
+    "checkpoint", 't5-small',
+    "Initial checkpoint")
+
+## Other parameters
+flags.DEFINE_string(
+    "config", 't5-small',
+    "T5 config")
 
 flags.DEFINE_integer(
-    "max_seq_length", 512,
-    "The maximum total input sequence length after WordPiece tokenization. "
-    "Sequences longer than this will be truncated, and sequences shorter "
-    "than this will be padded. Must match data generation.")
+    "max_feature_length", 512,
+    "The maximum length of a feature")
 
 flags.DEFINE_integer(
-    "max_predictions_per_seq", 80,
-    "Maximum number of masked LM predictions per sequence. "
-    "Must match data generation.")
+    "train_batch_size", 4,
+    "Total batch size for training.")
 
-flags.DEFINE_integer("max_questions_per_seq", 30, "")
+flags.DEFINE_integer(
+    "gradient_accumulation_multiplier", 8,
+    "backpropagation every gradient_accumulation_multiplier steps")
 
-flags.DEFINE_bool("do_train", False, "Whether to run training.")
+# REMARK: effective training batch size = train_batch_size*gradient_accumulation_multiplier
 
-flags.DEFINE_bool("do_eval", False, "Whether to run eval on the dev set.")
+flags.DEFINE_integer(
+    "eval_batch_size", 4,
+    "Total batch size for eval.")
 
-flags.DEFINE_integer("train_batch_size", 256, "Total batch size for training.")
+flags.DEFINE_float(
+    "learning_rate", 1e-4,
+    "The initial learning rate for Adam.")
 
-flags.DEFINE_integer("eval_batch_size", 8, "Total batch size for eval.")
+flags.DEFINE_integer(
+    "num_train_steps", 1000000,
+    "Number of training steps.")
 
-flags.DEFINE_float("learning_rate", 1e-4, "The initial learning rate for Adam.")
+flags.DEFINE_integer(
+    "num_warmup_steps", 10000,
+    "Number of warmup steps.")
 
-flags.DEFINE_integer("num_train_steps", 1000000, "Number of training steps.")
+flags.DEFINE_integer(
+    "save_checkpoints_steps", 10000,
+    "How often to save the model checkpoint.")
 
-flags.DEFINE_integer("num_warmup_steps", 10000, "Number of warmup steps.")
+flags.DEFINE_integer(
+    "keep_checkpoint_max", 100,
+    "maximum number of checkpoint to keep")
 
-flags.DEFINE_integer("save_checkpoints_steps", 10000,
-                     "How often to save the model checkpoint.")
+flags.DEFINE_integer(
+    "iterations_per_loop", 1000,
+    "How many steps to make in each estimator call.")
 
-flags.DEFINE_integer("keep_checkpoint_max", 100, "")
+flags.DEFINE_integer(
+    "max_eval_steps", 100,
+    "Maximum number of eval steps.")
 
-flags.DEFINE_integer("iterations_per_loop", 1000,
-                     "How many steps to make in each estimator call.")
-
-flags.DEFINE_integer("max_eval_steps", 100, "Maximum number of eval steps.")
-
-def model_fn_builder(init_checkpoint, learning_rate,
-                            num_train_steps, num_warmup_steps, model_dir, save_summary_steps):
-    """Returns `model_fn` closure for TPUEstimator."""
+def model_fn_builder(checkpoint, config_name, init_lr, gradient_accumulation_multiplier, num_train_steps,
+                            num_warmup_steps, output_dir, save_summary_steps):
+    """Returns `model_fn` closure for TFEstimator."""
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
-        """The `model_fn` for TPUEstimator."""
+        """The `model_fn` for TFEstimator."""
 
         tf.logging.info("*** Features ***")
         for name in sorted(features.keys()):
@@ -96,56 +108,99 @@ def model_fn_builder(init_checkpoint, learning_rate,
 
         input_ids = features["input_ids"]
         input_mask = features["input_mask"]
-
-        config = T5Config(pad_token_id=0, #[PAD]
-                          eos_token_id=102, # [SEP]
-                          bos_token_id=101, # [CLS]
-                          decoder_start_token_id=0, # [PAD]
-                          sep_token_id=102, #[SEP]
-                          vocab_size=28996)
-        model = TFT5ForConditionalGeneration(config)
-
         masked_span_ids = features["masked_span_ids"]
+
+        t5config = AutoConfig.from_pretrained(config_name)
+        model = TFT5ForConditionalGeneration(t5config)
+
+        if checkpoint:
+            model = TFT5ForConditionalGeneration.from_pretrained(checkpoint)
 
         # the forward function automatically creates the correct decoder_input_ids
         total_loss = model(input_ids=input_ids, labels=masked_span_ids, attention_mask=input_mask).loss
         total_loss = tf.math.reduce_sum(total_loss)
 
-        tvars = tf.trainable_variables()
-
-        initialized_variable_names = {}
-        if init_checkpoint:
-            (assignment_map, initialized_variable_names
-             ) = modeling.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
-            tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
-
-        tf.logging.info("**** Trainable Variables ****")
-        for var in tvars:
-            init_string = ""
-            if var.name in initialized_variable_names:
-                init_string = ", *INIT_FROM_CKPT*"
-            tf.logging.info("  name = %s, shape = %s%s", var.name, var.shape,
-                            init_string)
-
         output_spec = None
         if mode == tf.estimator.ModeKeys.TRAIN:
             summary_hook = tf.train.SummarySaverHook(
                 save_steps=save_summary_steps,
-                output_dir=os.path.join(model_dir, "train"),
+                output_dir=os.path.join(output_dir, "train"),
                 summary_op=tf.summary.scalar('loss', total_loss))
 
-            train_op = optimization.create_optimizer(
-                total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu=False)
+            save_checkpoint_hook = lambda: model.save_pretrained(os.path.join(output_dir, "hf_checkpoint/"))
+
+            #https://github.com/hpandana/gradient-accumulation-tf-estimator/blob/master/another-example.py
+            def _train_op_fn(loss): # TODO move to a file
+                """Returns the op to optimize the loss."""
+
+                global_step = tf.train.get_global_step()
+
+                # warmup
+                learning_rate = tf.constant(value=init_lr, shape=[], dtype=tf.float32)
+
+                # Implements linear decay of the learning rate.
+                learning_rate = tf.train.polynomial_decay(
+                    learning_rate,
+                    global_step,
+                    num_train_steps,
+                    end_learning_rate=0.0,
+                    power=1.0,
+                    cycle=False)
+
+                global_steps_int = tf.cast(global_step, tf.int32)
+                warmup_steps_int = tf.constant(num_warmup_steps, dtype=tf.int32)
+
+                global_steps_float = tf.cast(global_steps_int, tf.float32)
+                warmup_steps_float = tf.cast(warmup_steps_int, tf.float32)
+
+                warmup_percent_done = global_steps_float / warmup_steps_float
+                warmup_learning_rate = learning_rate * warmup_percent_done
+
+                is_warmup = tf.cast(global_steps_int < warmup_steps_int, tf.float32)
+                learning_rate = ((1.0 - is_warmup) * learning_rate + is_warmup * warmup_learning_rate)
+
+                # It is recommended that you use same optimizer for fine tuning
+                # (note that the Adam m/v variables are NOT loaded from init_checkpoint.) FIXME
+                optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+
+                # accumulate gradients
+                tvars = tf.trainable_variables()
+                grads = tf.gradients(loss, tvars)
+                accum_grads = [tf.Variable(tf.zeros_like(t_var.initialized_value()), trainable=False) for t_var in
+                               tvars]
+
+                def apply_accumulated_gradients(accum_grads, grads, tvars):
+                    accum_op = tf.group([accum_grad.assign_add(grad) for (accum_grad, grad) in zip(accum_grads, grads)])
+                    with tf.control_dependencies([accum_op]):
+                        normalized_accum_grads = [1.0 * accum_grad / gradient_accumulation_multiplier for accum_grad in
+                                                  accum_grads]
+                        # global_step is not incremented inside optimizer.apply_gradients
+                        minimize_op = optimizer.apply_gradients(zip(normalized_accum_grads, tvars), global_step=None)
+                        with tf.control_dependencies([minimize_op]):
+                            zero_op = tf.group(
+                                [accum_grad.assign(tf.zeros_like(accum_grad)) for accum_grad in accum_grads])
+                    return zero_op
+
+                # Create training operation
+                train_op = tf.cond(tf.math.equal(global_step % gradient_accumulation_multiplier, 0),
+                                   lambda: apply_accumulated_gradients(accum_grads, grads, tvars),
+                                   lambda: tf.group(
+                                       [accum_grad.assign_add(grad) for (accum_grad, grad) in zip(accum_grads, grads)])
+                                   )
+
+                # global_step is incremented here, regardless of the tf.cond branch
+                train_op = tf.group(train_op, [tf.assign_add(global_step, 1)])
+                return train_op
 
             output_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
                 loss=total_loss,
-                train_op=train_op,
-                training_hooks=[summary_hook])
+                train_op=_train_op_fn,
+                training_hooks=[summary_hook, save_checkpoint_hook])
         elif mode == tf.estimator.ModeKeys.EVAL:
             summary_hook = tf.train.SummarySaverHook(
                 save_steps=1, # TODO check
-                output_dir=os.path.join(model_dir, "eval"),
+                output_dir=os.path.join(output_dir, "eval"),
                 summary_op=tf.summary.scalar('loss', total_loss))
 
             output_spec = tf.estimator.EstimatorSpec(
@@ -162,7 +217,7 @@ def model_fn_builder(init_checkpoint, learning_rate,
 
 
 def input_fn_builder(input_files,
-                     max_seq_length,
+                     max_feature_length,
                      is_training,
                      batch_size,
                      num_cpu_threads=4):
@@ -172,9 +227,9 @@ def input_fn_builder(input_files,
         """The actual input function."""
 
         name_to_features = dict()
-        name_to_features["input_ids"] = tf.FixedLenFeature([max_seq_length], tf.int64)
-        name_to_features["input_mask"] = tf.FixedLenFeature([max_seq_length], tf.int64)
-        name_to_features["masked_span_ids"] = tf.FixedLenFeature([max_seq_length], tf.int64)
+        name_to_features["input_ids"] = tf.FixedLenFeature([max_feature_length], tf.int64)
+        name_to_features["input_mask"] = tf.FixedLenFeature([max_feature_length], tf.int64)
+        name_to_features["masked_span_ids"] = tf.FixedLenFeature([max_feature_length], tf.int64)
 
         # For training, we want a lot of parallel reading and shuffling.
         # For eval, we want no shuffling and parallel reading doesn't matter.
@@ -231,9 +286,6 @@ def _decode_record(record, name_to_features):
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
 
-    if not FLAGS.do_train and not FLAGS.do_eval:
-        raise ValueError("At least one of `do_train` or `do_eval` must be True.")
-
     tf.gfile.MakeDirs(FLAGS.output_dir)
 
     train_input_files = []
@@ -254,16 +306,19 @@ def main(_):
         tf.logging.info("  %s" % input_file)
 
     run_config = tf.estimator.RunConfig(
-        model_dir=FLAGS.output_dir,
+        output_dir=FLAGS.output_dir,
         save_checkpoints_steps=FLAGS.save_checkpoints_steps,
-        keep_checkpoint_max=FLAGS.keep_checkpoint_max)
+        keep_checkpoint_max=FLAGS.keep_checkpoint_max,
+        iterations_per_loop=FLAGS.iterations_per_loop)
 
     model_fn = model_fn_builder(
-        init_checkpoint=FLAGS.init_checkpoint,
-        learning_rate=FLAGS.learning_rate,
+        checkpoint=FLAGS.checkpoint,
+        config_name=FLAGS.config,
+        init_lr=FLAGS.learning_rate,
+        gradient_accumulation_multiplier=FLAGS.gradient_accumulation_multiplier,
         num_train_steps=FLAGS.num_train_steps,
         num_warmup_steps=FLAGS.num_warmup_steps,
-        model_dir=FLAGS.output_dir,
+        output_dir=FLAGS.output_dir,
         save_summary_steps=FLAGS.save_checkpoints_steps) # this is on purpose save_checkpoints_steps
 
     # Normal Estimator on CPU or GPU.
@@ -274,18 +329,18 @@ def main(_):
     train_input_fn = input_fn_builder(
         input_files=train_input_files,
         batch_size=FLAGS.train_batch_size,
-        max_seq_length=FLAGS.max_seq_length,
+        max_feature_length=FLAGS.max_feature_length,
         is_training=True)
 
     eval_input_fn = input_fn_builder(
         input_files=val_input_files,
         batch_size=FLAGS.train_batch_size, # this is on purpose train_batch_size
-        max_seq_length=FLAGS.max_seq_length,
+        max_feature_length=FLAGS.max_feature_length,
         is_training=False)
 
     # setup train spec
     train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn,
-                                        max_steps=FLAGS.num_train_steps)
+                                        max_steps=)
 
     # setup eval spec evaluating every checkpoint
     eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn)

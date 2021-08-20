@@ -3,8 +3,6 @@ from collections import namedtuple, defaultdict
 import numpy as np
 import tensorflow as tf
 
-from tokenization import SPECIAL_TOKENS
-
 STOPWORDS = {'ourselves', 'hers', 'between', 'yourself', 'but', 'again', 'there', 'about', 'once', 'during', 'out',
              'very', 'having', 'with', 'they', 'own', 'an', 'be', 'some', 'for', 'do', 'its', 'yours', 'such', 'into',
              'of', 'most', 'itself', 'other', 'off', 'is', 's', 'am', 'or', 'who', 'as', 'from', 'him', 'each', 'the',
@@ -112,10 +110,9 @@ def get_span_clusters_by_length(span_clusters, seq_length):
     return filtered_span_clusters
 
 
-def create_recurring_span_selection_predictions(tokens, max_recurring_predictions, max_span_length, masked_lm_prob, ngrams=None):
+def create_recurring_span_selection_predictions(tokens, max_recurring_predictions, max_span_length, masked_lm_prob):
     masked_spans = []
     num_predictions = 0
-    input_mask = [1] * len(tokens)
     new_tokens = list(tokens)
 
     already_masked_tokens = [False] * len(new_tokens)
@@ -171,14 +168,13 @@ def create_recurring_span_selection_predictions(tokens, max_recurring_prediction
                 is_first_token = True
                 for j in _iterate_span_indices(span):
                     if is_first_token:
-                        new_tokens[j] = "[unused]"
+                        new_tokens[j] = "<extra_id>"
                         masked_spans.append(MaskedSpanInstance(index=j,
                                                                begin_label=unmasked_span_beginning,
                                                                end_label=unmasked_span_ending))
                         num_predictions += 1
                     else:
-                        new_tokens[j] = "[PAD]"
-                        input_mask[j] = 0
+                        new_tokens[j] = "<pad>"
 
                     is_first_token = False
                     already_masked_tokens[j] = True
@@ -189,21 +185,21 @@ def create_recurring_span_selection_predictions(tokens, max_recurring_prediction
     assert len(masked_spans) <= num_to_predict
     masked_spans = sorted(masked_spans, key=lambda x: x.index)
 
-    j = 1
+    j = 0
     for i, token in enumerate(new_tokens):
-        if token == '[unused]':
-           new_tokens[i] = f'[unused{j}]'
-           j += 1
+        if token == '<extra_id>':
+            new_tokens[i] = f'<extra_id_{j}>'
+            j += 1
 
-    masked_span_positions = []
     span_label_tokens = []
     if len(masked_spans) == 0:
         print('skiping...')
-        return None, None, None, None, None
+        return None, None, None
 
     for j, p in enumerate(masked_spans):
-        masked_span_positions.append(p.index)
-        span_label_tokens = span_label_tokens + [f"[unused{j+1}]"] + tokens[p.begin_label:p.end_label + 1]
-    span_label_tokens = span_label_tokens + [f"[unused{len(masked_spans)}]"] + ["[SEP]"]
+        span_label_tokens = span_label_tokens + [f"<extra_id_{j}>"] + tokens[p.begin_label:p.end_label + 1]
+    # </s> added in /a/home/cc/students/cs/sehaik/.local/lib/python3.7/site-packages/transformers/models/t5/tokenization_t5.py line 191
+    #span_label_tokens = span_label_tokens + [f"<extra_id_{len(masked_spans)}>"] + ["</s>"]
+    span_label_tokens = span_label_tokens + [f"<extra_id_{len(masked_spans)}>"]
 
-    return new_tokens, masked_span_positions, input_mask, span_label_tokens, span_clusters
+    return new_tokens, span_label_tokens, span_clusters

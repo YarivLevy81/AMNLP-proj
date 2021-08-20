@@ -199,7 +199,6 @@ def create_training_instances(input_file, tokenizer, max_seq_length, dupe_factor
     with tf.gfile.GFile(input_file, "r") as reader:
         for i, line in enumerate(reader):
             line = tokenizer._clean_text(line)
-            print("line:", line)
             if (not line) or line.startswith("</doc"):
                 continue
             if line.startswith("<doc"):

@@ -19,7 +19,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_path", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
-    parser.add_argument("--tokenizer", type=str, default='t5-small', required=False)
+    parser.add_argument("--tokenizer", type=str, default='t5-base', required=False)
     parser.add_argument("--cache_dir", type=str, default=None, required=False)
     parser.add_argument("--max_feature_length", type=int, default=512, required=False)
     args = parser.parse_args()

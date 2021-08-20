@@ -41,12 +41,12 @@ flags.DEFINE_string(
 
 ## Other parameters
 flags.DEFINE_string(
-    "checkpoint", 't5-small',
+    "checkpoint", 't5-base',
     "Initial checkpoint")
 
 ## Other parameters
 flags.DEFINE_string(
-    "config", 't5-small',
+    "config", 't5-base',
     "T5 config")
 
 flags.DEFINE_integer(

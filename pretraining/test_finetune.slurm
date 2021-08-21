@@ -3,7 +3,7 @@
 #SBATCH --output=test_finetune.out
 #SBATCH --error=test_finetune.err
 #SBATCH --partition=studentkillable
-#SBATCH --mail-user=sehaik@mail.tau.ac.il
+#SBATCH --mail-user=yarivlevy@mail.tau.ac.il
 #SBATCH --mail-type=ALL
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import os
 import tensorflow
+import datetime
 tf = tensorflow.compat.v1
 
 class HGNFCheckpointHook(tf.train.SessionRunHook):
@@ -14,5 +15,5 @@ class HGNFCheckpointHook(tf.train.SessionRunHook):
         self.path = path
 
     def begin(self):
-        global_step = tf.train.get_global_step()
-        self.model.save_pretrained(os.path.join(self.path, global_step))
+        suffix = datetime.datetime.now()
+        self.model.save_pretrained(os.path.join(self.path, str(suffix)))

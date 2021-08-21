@@ -260,10 +260,10 @@ def main(_):
         tf.logging.info("  %s" % input_file)
 
     run_config = tf.estimator.RunConfig(
-        output_dir=FLAGS.output_dir,
+        #output_dir=FLAGS.output_dir,
         save_checkpoints_steps=FLAGS.save_checkpoints_steps,
         keep_checkpoint_max=FLAGS.keep_checkpoint_max,
-        iterations_per_loop=FLAGS.iterations_per_loop
+        #iterations_per_loop=FLAGS.iterations_per_loop
     )
 
     model_fn = model_fn_builder(
@@ -280,6 +280,7 @@ def main(_):
     # Normal Estimator on CPU or GPU.
     estimator = tf.estimator.Estimator(
         model_fn=model_fn,
+        model_dir=FLAGS.output_dir,
         config=run_config)
 
     train_input_fn = input_fn_builder(

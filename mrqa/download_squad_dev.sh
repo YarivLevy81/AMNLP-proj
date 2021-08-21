@@ -1,0 +1,1 @@
+ wget https://s3.us-east-2.amazonaws.com/mrqa/release/v2/dev/SQuAD.jsonl.gz -O /home/yandex/AMNLP2021/sehaik/mrqa-few-shot/squad_dev/SQuAD.jsonl.gz

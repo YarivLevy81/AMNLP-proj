@@ -22,6 +22,7 @@ def get_args():
     parser.add_argument("--tokenizer", type=str, default='t5-base', required=False)
     parser.add_argument("--cache_dir", type=str, default=None, required=False)
     parser.add_argument("--max_feature_length", type=int, default=512, required=False)
+    parser.add_argument("--max_number_of_records", type=int, default=0, required=False)
     args = parser.parse_args()
     return args
 
@@ -97,26 +98,33 @@ def process_file (data, tokenizer, path, output_dir, max_feature_length=512):
         #print('context:', context)
         #print('label:', label)
         #print('ids:', ids)
+        #print('len_ids', len(ids))
         #print('label_ids:', label_ids)
 
         f_name = os.path.splitext(path_leaf(path))[0]
         example_path =  os.path.join(output_dir, f'{f_name}_{i}.tfrecord')
-        print('saved file: ', example_path)
+        print('saving file: ', example_path)
         save_tfrecords(ids, label_ids, example_path, max_feature_length)
 
 
 def main():
     args = get_args()
+    print('tokenizer:', args.tokenizer)
     output_dir = args.output_dir
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     paths = glob(args.input_path)
-    for path in tqdm(paths):
+    num_of_records=0
+    for i, path in enumerate(tqdm(paths)):
+        if args.max_number_of_records and i>=args.max_number_of_records:
+            print('reached max_number_of_records')
+            break
+
         data, header = read_mrqa(path)
-        print('tokenizer:', args.tokenizer)
         tokenizer = tokenization.Tokenizer(args.tokenizer, cache_dir=args.cache_dir)
         process_file(data, tokenizer, path, output_dir, args.max_feature_length)
+    print('done')
 
 
 if __name__ == '__main__':

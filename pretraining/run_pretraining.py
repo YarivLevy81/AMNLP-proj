@@ -44,7 +44,12 @@ flags.DEFINE_string(
 ## Other parameters
 flags.DEFINE_string(
     "checkpoint", 't5-base',
-    "Initial checkpoint")
+    "hugging face pretrained")
+
+## Other parameters
+flags.DEFINE_string(
+    "tf_checkpoint", None,
+    "TF ckpt.index file")
 
 flags.DEFINE_string(
     "cache_dir", None,
@@ -73,6 +78,10 @@ flags.DEFINE_integer(
     "eval_batch_size", 4,
     "Total batch size for eval.")
 
+flags.DEFINE_integer(
+    "throttle_secs", 600,
+    "minimum time between evals.")
+
 flags.DEFINE_float(
     "learning_rate", 1e-4,
     "The initial learning rate for Adam.")
@@ -90,19 +99,20 @@ flags.DEFINE_integer(
     "How often to save the model checkpoint.")
 
 flags.DEFINE_integer(
-    "keep_checkpoint_max", 100,
+    "keep_checkpoint_max", 1,
     "maximum number of checkpoint to keep")
 
-flags.DEFINE_integer(
-    "iterations_per_loop", 1000,
-    "How many steps to make in each estimator call.")
+#flags.DEFINE_integer(
+#    "iterations_per_loop", 1000,
+#    "How many steps to make in each estimator call.")
 
 #flags.DEFINE_integer(
 #    "max_eval_steps", 100,
 #    "Maximum number of eval steps.")
 
-def model_fn_builder(checkpoint, cache_dir, config_name, init_lr, gradient_accumulation_multiplier, num_train_steps,
-                            num_warmup_steps, output_dir, save_summary_steps):
+def model_fn_builder(checkpoint, tf_checkpoint, cache_dir, config_name, init_lr,
+                     gradient_accumulation_multiplier, num_train_steps,
+                            num_warmup_steps, output_dir, save_checkpoint_steps):
     """Returns `model_fn` closure for TFEstimator."""
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
@@ -120,7 +130,11 @@ def model_fn_builder(checkpoint, cache_dir, config_name, init_lr, gradient_accum
         model = TFT5ForConditionalGeneration(t5config)
 
         if checkpoint:
-            model = TFT5ForConditionalGeneration.from_pretrained(checkpoint,cache_dir=cache_dir)
+            model = TFT5ForConditionalGeneration.from_pretrained(checkpoint, cache_dir=cache_dir)
+        elif tf_checkpoint:
+            #config = BertConfig.from_json_file('./tf_model/my_tf_model_config.json')
+            #e.g. './tf_model/my_tf_checkpoint.ckpt.index'
+            model = TFT5ForConditionalGeneration.from_pretrained(checkpoint, from_pt=False, config=t5config)
 
         # the forward function automatically creates the correct decoder_input_ids
         total_loss = model(input_ids=input_ids, labels=masked_span_ids, attention_mask=input_mask).loss
@@ -129,14 +143,14 @@ def model_fn_builder(checkpoint, cache_dir, config_name, init_lr, gradient_accum
         output_spec = None
         if mode == tf.estimator.ModeKeys.TRAIN:
             summary_hook = tf.train.SummarySaverHook(
-                save_steps=save_summary_steps,
+                save_steps=save_checkpoint_steps,
                 output_dir=os.path.join(output_dir, "train"),
                 summary_op=tf.summary.scalar('loss', total_loss))
 
-            save_checkpoint_hook = HGNFCheckpointHook(
-                model=model,
-                path=os.path.join(output_dir, "hf_ckpt")
-            )
+            #save_checkpoint_hook = HGNFCheckpointHook(
+            #    model=model,
+            #    path=os.path.join(output_dir, "hf_ckpt")
+            #)
 
             train_op = train_op_fn(
                 total_loss,
@@ -150,7 +164,8 @@ def model_fn_builder(checkpoint, cache_dir, config_name, init_lr, gradient_accum
                 mode=mode,
                 loss=total_loss,
                 train_op=train_op,
-                training_hooks=[summary_hook, save_checkpoint_hook])
+                #training_hooks=[summary_hook, save_checkpoint_hook])
+                training_hooks=[summary_hook])
         elif mode == tf.estimator.ModeKeys.EVAL:
             summary_hook = tf.train.SummarySaverHook(
                 save_steps=1, # TODO check
@@ -260,14 +275,16 @@ def main(_):
         tf.logging.info("  %s" % input_file)
 
     run_config = tf.estimator.RunConfig(
-        #output_dir=FLAGS.output_dir,
+        model_dir=FLAGS.output_dir,
         save_checkpoints_steps=FLAGS.save_checkpoints_steps,
+        #save_summary_steps=FLAGS.save_checkpoints_steps,
         keep_checkpoint_max=FLAGS.keep_checkpoint_max,
         #iterations_per_loop=FLAGS.iterations_per_loop
     )
 
     model_fn = model_fn_builder(
         checkpoint=FLAGS.checkpoint,
+        tf_checkpoint=FLAGS.tf_checkpoint,
         cache_dir=FLAGS.cache_dir,
         config_name=FLAGS.config,
         init_lr=FLAGS.learning_rate,
@@ -275,12 +292,11 @@ def main(_):
         num_train_steps=FLAGS.num_train_steps,
         num_warmup_steps=FLAGS.num_warmup_steps,
         output_dir=FLAGS.output_dir,
-        save_summary_steps=FLAGS.save_checkpoints_steps) # this is on purpose save_checkpoints_steps
+        save_checkpoint_steps=FLAGS.save_checkpoints_steps) # this is on purpose save_checkpoints_steps
 
     # Normal Estimator on CPU or GPU.
     estimator = tf.estimator.Estimator(
         model_fn=model_fn,
-        model_dir=FLAGS.output_dir,
         config=run_config)
 
     train_input_fn = input_fn_builder(
@@ -300,7 +316,8 @@ def main(_):
                                         max_steps=FLAGS.num_train_steps)
 
     # setup eval spec evaluating every checkpoint
-    eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn)
+    eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn,
+                                      throttle_secs=FLAGS.throttle_secs)
 
     tf.logging.info("***** Running training *****")
     tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)

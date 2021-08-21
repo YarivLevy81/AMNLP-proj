@@ -3,7 +3,7 @@
 #SBATCH --output=run_pretrain.out
 #SBATCH --error=run_pretrain.err
 #SBATCH --partition=studentkillable
-#SBATCH --mail-user=yarivlevy@mail.tau.ac.il
+#SBATCH --mail-user=sehaik@mail.tau.ac.il
 #SBATCH --mail-type=ALL
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

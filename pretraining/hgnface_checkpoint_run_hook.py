@@ -14,6 +14,17 @@ class HGNFCheckpointHook(tf.train.SessionRunHook):
         self.model = model
         self.path = path
 
-    def begin(self):
+    def save_ckpt(self):
+        tf.logging.info("***** Saving huggingface checkpoint *****")
         suffix = datetime.datetime.now()
         self.model.save_pretrained(os.path.join(self.path, str(suffix)))
+        tf.logging.info("***** Saving huggingface checkpoint - Done! *****")
+
+    def begin(self):
+        self.save_ckpt()
+
+    def end(self, session=None):
+        self.save_ckpt()
+
+    def after_run(self, run_context, run_values):
+        self.save_ckpt()

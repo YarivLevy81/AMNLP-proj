@@ -1,7 +1,7 @@
 #! /bin/sh
-#SBATCH --job-name=test_check_mrqa_tfrecord
-#SBATCH --output=test_check_mrqa_tfrecord.out
-#SBATCH --error=test_check_mrqa_tfrecord.err
+#SBATCH --job-name=test_t5_base
+#SBATCH --output=test_t5_base.out
+#SBATCH --error=test_t5_base.err
 #SBATCH --partition=studentkillable
 #SBATCH --mail-user=sehaik@mail.tau.ac.il
 #SBATCH --mail-type=ALL
@@ -9,4 +9,4 @@
 #SBATCH --ntasks=1
 #SBATCH --gpus=1
 #SBATCH --time=60
-./scripts/test_check_mrqa_tfrecord.sh
+./scripts/test_t5_base.sh

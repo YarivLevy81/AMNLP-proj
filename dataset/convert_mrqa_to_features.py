@@ -23,6 +23,7 @@ def get_args():
     parser.add_argument("--cache_dir", type=str, default=None, required=False)
     parser.add_argument("--max_feature_length", type=int, default=512, required=False)
     parser.add_argument("--max_number_of_records", type=int, default=0, required=False)
+    parser.add_argument("--label_ignore_id", type=int, default=-100, required=False)
     args = parser.parse_args()
     return args
 
@@ -41,10 +42,12 @@ def create_int_feature(values):
     feature = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
     return feature
 
-def save_tfrecords(input_ids, label_ids, example_path, max_feature_length=512):
+def save_tfrecords(input_ids, label_ids, example_path, max_feature_length=512, label_ignore_id=-100):
+    global saved_files_count
 
     input_len = len(input_ids)
     input_mask = [1 if input_ids[i] != 0 else 0 for i in range(len(input_ids))]
+    label_ids = [label_ignore_id] + label_ids
 
     if input_len > max_feature_length or input_len != len(input_mask) or \
             len(label_ids) > max_feature_length:
@@ -53,7 +56,7 @@ def save_tfrecords(input_ids, label_ids, example_path, max_feature_length=512):
 
     input_ids += [0] * (max_feature_length - len(input_ids))
     input_mask += [0] * (max_feature_length - len(input_mask))
-    label_ids += [0] * (max_feature_length - len(label_ids))
+    label_ids += [label_ignore_id] * (max_feature_length - len(label_ids))
 
     assert len(input_ids) == max_feature_length
     assert len(input_mask) == max_feature_length
@@ -68,6 +71,7 @@ def save_tfrecords(input_ids, label_ids, example_path, max_feature_length=512):
 
     with tf.io.TFRecordWriter(example_path) as file_writer:
         file_writer.write(tf_example.SerializeToString())
+    saved_files_count += 1
 
 
 def path_leaf(path):
@@ -75,9 +79,9 @@ def path_leaf(path):
     return tail or ntpath.basename(head)
 
 
-def process_file (data, tokenizer, path, output_dir, max_feature_length=512):
-    global len_c
-    global len_l
+def process_file (data, tokenizer, path, output_dir, max_number_of_records, max_feature_length=512, label_ignore_id=-100):
+    global saved_files_count
+
     for i, entry in tqdm(enumerate(data)):
         context = entry["context"]
         label = ""
@@ -101,13 +105,19 @@ def process_file (data, tokenizer, path, output_dir, max_feature_length=512):
         #print('len_ids', len(ids))
         #print('label_ids:', label_ids)
 
+        if max_number_of_records and saved_files_count>=max_number_of_records:
+            print('reached max_number_of_records')
+            exit(0)
+
         f_name = os.path.splitext(path_leaf(path))[0]
-        example_path =  os.path.join(output_dir, f'{f_name}_{i}.tfrecord')
+        example_path =  os.path.join(output_dir, f'{f_name}_{saved_files_count}.tfrecord')
         print('saving file: ', example_path)
-        save_tfrecords(ids, label_ids, example_path, max_feature_length)
+        save_tfrecords(ids, label_ids, example_path, max_feature_length, label_ignore_id)
 
-
+saved_files_count = 0
 def main():
+    global saved_files_count
+
     args = get_args()
     print('tokenizer:', args.tokenizer)
     output_dir = args.output_dir
@@ -115,15 +125,11 @@ def main():
         os.makedirs(output_dir)
 
     paths = glob(args.input_path)
-    num_of_records=0
+    saved_files_count=0
     for i, path in enumerate(tqdm(paths)):
-        if args.max_number_of_records and i>=args.max_number_of_records:
-            print('reached max_number_of_records')
-            break
-
         data, header = read_mrqa(path)
         tokenizer = tokenization.Tokenizer(args.tokenizer, cache_dir=args.cache_dir)
-        process_file(data, tokenizer, path, output_dir, args.max_feature_length)
+        process_file(data, tokenizer, path, output_dir, args.max_number_of_records, args.max_feature_length, args.label_ignore_id)
     print('done')
 
 

@@ -81,13 +81,14 @@ def print_output(model, tokenizer, dataset, max_length = 128, min_length=1, num_
         loss = model(input_ids=features['input_ids'], attention_mask=features['input_mask'],
                      labels=features['masked_span_ids']).loss
         print('loss:', loss)
-        print('input_mask:', features['input_ids'].numpy())
+        print('input_mask:', features['input_mask'].numpy())
         loss = tf.math.reduce_sum(loss)
         print('reduced loss:', loss)
 
         outputs = model.generate(input_ids=features['input_ids'], attention_mask=features['input_mask'],
                                  max_length=max_length, min_length=min_length) # no need for attention mask
         print('output:\n', tokenizer.decode(outputs.numpy()[0]))
+        print('output_ids:\n', outputs.numpy()[0])
 
         print("F1 score:", "not implemented") # FIXME
         #print("F1 score:", calculate_F1_score(tokenizer, features['masked_span_ids'], outputs))

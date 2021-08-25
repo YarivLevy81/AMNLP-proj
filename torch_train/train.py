@@ -136,7 +136,7 @@ def main(args):
 
     tokenizer = AutoTokenizer.from_pretrained(args.config, cache_dir=args.cache_dir) # TODO use for F1 in eval
     if args.from_pretrained:
-        model = TFT5ForConditionalGeneration.from_pretrained(args.config, cache_dir=cache_dir)
+        model = T5ForConditionalGeneration.from_pretrained(args.config, cache_dir=args.cache_dir)
     else:
         t5config = AutoConfig.from_pretrained(args.config, cache_dir=args.cache_dir)
         model = T5ForConditionalGeneration(t5config)

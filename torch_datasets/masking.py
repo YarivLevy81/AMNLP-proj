@@ -1,7 +1,6 @@
 import time
 from collections import namedtuple, defaultdict
 import numpy as np
-import tensorflow as tf
 
 STOPWORDS = {'ourselves', 'hers', 'between', 'yourself', 'but', 'again', 'there', 'about', 'once', 'during', 'out',
              'very', 'having', 'with', 'they', 'own', 'an', 'be', 'some', 'for', 'do', 'its', 'yours', 'such', 'into',
@@ -126,7 +125,6 @@ def create_recurring_span_selection_predictions(tokens, max_recurring_prediction
     span_clusters = get_span_clusters_by_length(span_clusters, len(tokens))
     span_clusters = [(cluster, tuple(tokens[cluster[0][0]:cluster[0][1]+1])) for cluster in span_clusters]
     # end_time = time.time()
-    # tf.logging.info(f"Finding recurrent ngrams took {end_time - start_time} seconds, {len(tokens)} tokens")
 
     span_cluster_indices = np.random.permutation(range(len(span_clusters)))
     span_counter = 0
@@ -160,7 +158,7 @@ def create_recurring_span_selection_predictions(tokens, max_recurring_prediction
 
                 if any([new_tokens[j] != new_tokens[k] for j, k in
                                        zip(_iterate_span_indices(span), _iterate_span_indices(unmasked_span))]):
-                    tf.logging.warning(
+                    print(
                         f"Two non-identical spans: unmasked {new_tokens[unmasked_span_beginning:unmasked_span_ending + 1]}, "
                         f"masked:{new_tokens[span[0]:span[1] + 1]}")
                     continue

@@ -2,10 +2,9 @@ import torch
 import pandas as pd
 
 class SplinterDataset(torch.utils.data.Dataset):
-    def __init__(self, data_file, train=True, columns=['input_ids', 'attention_mask', 'labels']):
+    def __init__(self, data_file, columns=['input_ids', 'attention_mask', 'labels']):
         data = torch.load(data_file)
         self.df = pd.DataFrame(data, index=range(len(data)), columns=columns)
-        self.train=train
 
     def __len__(self):
         return len(self.df)
@@ -18,9 +17,8 @@ class SplinterDataset(torch.utils.data.Dataset):
 
         batch = {
             'input_ids': input_ids,
-            'attention_mask': attention_mask
+            'attention_mask': attention_mask,
+            'labels': labels
         }
-        if self.train:
-            batch['labels'] = labels
 
         return batch

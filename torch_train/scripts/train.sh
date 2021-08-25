@@ -8,4 +8,5 @@ python3 train.py \
 --schedule_steps=10 \
 --gradient_accumulation_steps=1 \
 --print_loss_steps=10 \
---from_pretrained=True
+--from_pretrained=True \
+--config=t5-small

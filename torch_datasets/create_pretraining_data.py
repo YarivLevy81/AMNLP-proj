@@ -21,14 +21,10 @@ import time
 from multiprocessing import Pool
 import pickle
 import numpy as np
-
-import tensorflow
-
-tf = tensorflow.compat.v1
+import torch
 
 from masking import create_recurring_span_selection_predictions
 import sys
-
 sys.path.append('../tokenization')
 import tokenization
 
@@ -80,7 +76,7 @@ flags.DEFINE_bool(
     "verbose")
 
 flags.DEFINE_string(
-    "tokenizer", 't5-base',
+    "tokenizer", 't5-small',
     "T5 model size.")
 
 flags.DEFINE_string(
@@ -113,81 +109,46 @@ class DataStatistics:
         self.ngrams = collections.Counter()
 
 
-def write_instance_to_example_files(instances, tokenizer, max_feature_length, output_files):
+def write_instance_to_example_files(instances, tokenizer, tensor_length, output_files):
     """Create TF example files from `TrainingInstance`s."""
-
-    writers = []
-    for output_file in output_files:
-        writers.append(tf.io.TFRecordWriter(output_file))
-
-    writer_index = 0
-
     total_written, total_tokens_written, skipped_instances = 0, 0, 0
+
     for (inst_index, instance) in enumerate(instances):
         input_ids = tokenizer(" ".join(instance.tokens)).input_ids
         input_len = len(input_ids)
         input_mask = [1 if input_ids[i] != 0 else 0 for i in range(len(input_ids))]
         masked_span_ids = tokenizer(" ".join(instance.masked_span_tokens)).input_ids
+        masked_span_ids = [-100] + masked_span_ids
 
-        if input_len > max_feature_length or input_len != len(input_mask) or \
-                len(masked_span_ids) > max_feature_length:
-            tf.logging.info("skipping...")
+        if input_len > tensor_length or input_len != len(input_mask) or \
+                len(masked_span_ids) > tensor_length:
+            print("skipping...")
             skipped_instances += 1
             continue
-
-        # tf.logging.info(f"input_len: {input_len}")
-        # tf.logging.info(f"input_ids: {input_ids}")
-        # tf.logging.info(f"input_mask: {input_mask}")
-        # tf.logging.info(f"span_ids_len: {len(masked_span_ids)}")
-        # tf.logging.info(f"masked_span_ids: {masked_span_ids}")
-
-        input_ids += [0] * (max_feature_length - len(input_ids))
-        input_mask += [0] * (max_feature_length - len(input_mask))
-        masked_span_ids += [0] * (max_feature_length - len(masked_span_ids))
-
-        assert len(input_ids) == max_feature_length
-        assert len(input_mask) == max_feature_length
-        assert len(masked_span_ids) == max_feature_length
-
-        features = collections.OrderedDict()
-        features["input_ids"] = create_int_feature(input_ids)
-        features["input_mask"] = create_int_feature(input_mask)
-        features["masked_span_ids"] = create_int_feature(masked_span_ids)
-
-        tf_example = tf.train.Example(features=tf.train.Features(feature=features))
-
-        writers[writer_index].write(tf_example.SerializeToString())
-        writer_index = (writer_index + 1) % len(writers)
 
         total_written += 1
         total_tokens_written += input_len
 
-        if FLAGS.verbose and inst_index < 20:
-            tf.logging.info("*** Example ***")
-            tf.logging.info("tokens: %s" % " ".join(instance.tokens))
+        input_ids += [0] * (tensor_length - len(input_ids))
+        input_mask += [0] * (tensor_length - len(input_mask))
+        masked_span_ids += [-100] * (tensor_length - len(masked_span_ids))
 
-            for feature_name in features.keys():
-                feature = features[feature_name]
-                values = []
-                if feature.int64_list.value:
-                    values = feature.int64_list.value
-                elif feature.float_list.value:
-                    values = feature.float_list.value
-                tf.logging.info(
-                    "%s: %s" % (feature_name, " ".join([str(x) for x in values])))
+        assert len(input_ids) == tensor_length
+        assert len(input_mask) == tensor_length
+        assert len(masked_span_ids) == tensor_length
 
-    for writer in writers:
-        writer.close()
+        example = {
+            'input_ids': np.array(input_ids),
+            'attention_mask': np.array(input_mask),
+            'labels': np.array(masked_span_ids)
+        }
+        examples.append(example)
 
+    torch.save(examples, output_files[0])
     if total_written != 0:
-        tf.logging.info(f"Skipped {skipped_instances} instances")
-        tf.logging.info(
+        print(f"Skipped {skipped_instances} instances")
+        print(
             f"Wrote {total_written} total instances, average length is {total_tokens_written // total_written}")
-
-
-def create_int_feature(values):
-    feature = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
-    return feature
 
 
 def create_training_instances(input_file, tokenizer, max_seq_length, dupe_factor, masked_lm_prob,
@@ -290,7 +251,7 @@ def create_instances_from_document(all_documents, document_index, max_seq_length
 
 
 def process_file(input_file, output_file, tokenizer, rng):
-    tf.logging.info(f"*** Started processing file {input_file} ***")
+    print(f"*** Started processing file {input_file} ***")
 
     statistics = DataStatistics()
 
@@ -299,12 +260,12 @@ def process_file(input_file, output_file, tokenizer, rng):
         FLAGS.masked_lm_prob, rng, FLAGS.max_questions_per_seq,
         FLAGS.max_span_length, statistics)
 
-    tf.logging.info(f"*** Finished processing {statistics.num_contexts} contexts from file {input_file}, "
+    print(f"*** Finished processing {statistics.num_contexts} contexts from file {input_file}, "
                     f"writing to output file {output_file} ***")
 
     write_instance_to_example_files(instances, tokenizer, FLAGS.max_feature_length, [output_file])
 
-    tf.logging.info(f"*** Finished writing to output file {output_file} ***")
+    print(f"*** Finished writing to output file {output_file} ***")
     return statistics
 
 
@@ -312,11 +273,10 @@ def get_output_file(input_file, output_dir):
     path = os.path.normpath(input_file)
     split = path.split(os.sep)
     dir_and_file = split[-2:]
-    return os.path.join(output_dir, '_'.join(dir_and_file) + '.tfrecord')
+    return os.path.join(output_dir, '_'.join(dir_and_file) + '.pt')
 
 
 def main(_):
-    tf.logging.set_verbosity(tf.logging.INFO)
 
     assert not tf.io.gfile.exists(FLAGS.output_dir), "Output directory already exists"
     tf.io.gfile.mkdir(FLAGS.output_dir)
@@ -327,7 +287,7 @@ def main(_):
     for input_pattern in FLAGS.input_file.split(","):
         input_files.extend(tf.gfile.Glob(input_pattern))
 
-    tf.logging.info(f"*** Reading from {len(input_files)} files ***")
+    print(f"*** Reading from {len(input_files)} files ***")
 
     rng = random.Random(FLAGS.random_seed)
 
@@ -338,18 +298,18 @@ def main(_):
 
     total_num_contexts = sum([res.num_contexts for res in results])
 
-    tf.logging.info("Finished writing all files! Aggregating statistics..")
+    print("Finished writing all files! Aggregating statistics..")
     ngrams = functools.reduce(lambda x, y: x + y, [res.ngrams for res in results])
     ngrams = collections.Counter({" ".join(tokens): num for tokens, num in ngrams.items()}).most_common()
-    tf.logging.info(f"100 most common ngrams: {ngrams[:100]}")
+    print(f"100 most common ngrams: {ngrams[:100]}")
 
     ngrams_file = os.path.join(FLAGS.output_dir, "ngrams.txt")
     with tf.gfile.GFile(ngrams_file, "w") as writer:
         for ngram, num in ngrams:
             writer.write(f"{ngram}\t{num}\n")
-    tf.logging.info(f"Number of unique n-grams: {len(ngrams)}")
+    print(f"Number of unique n-grams: {len(ngrams)}")
 
-    tf.logging.info(f"Done! Total number of contexts: {total_num_contexts}")
+    print(f"Done! Total number of contexts: {total_num_contexts}")
 
 
 if __name__ == "__main__":

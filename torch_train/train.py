@@ -2,6 +2,7 @@ import os
 import argparse
 
 import torch
+from torch.utils.tensorboard import SummaryWriter
 from warmup_scheduler import GradualWarmupScheduler
 
 from transformers import T5ForConditionalGeneration, AutoConfig
@@ -26,7 +27,7 @@ def parse_args():
                         help='huggingface checkpoint')
     parser.add_argument('--cache_dir', type=str, default=None, required=False,
                         help='cache_dir fo huggingface data')
-    parser.add_argument('--config', type=str, default='t5-base', required=False,
+    parser.add_argument('--config', type=str, default='t5-small', required=False,
                         help='huggingface config')
     parser.add_argument('--train_batch_size', type=int, default=2, required=False,
                         help='train dataset batch size')
@@ -56,8 +57,7 @@ def parse_args():
 
 def create_dataloaders(args):
     train_dataset = SplinterDataset(args.train_dataset)
-    #eval_dataset = SplinterDataset(args.eval_dataset) FIXME
-    eval_dataset = SplinterDataset(args.train_dataset)
+    eval_dataset = SplinterDataset(args.eval_dataset)
 
     train_dataloader = torch.utils.data.DataLoader(
         dataset=train_dataset,
@@ -90,13 +90,15 @@ def eval(model, eval_dataloader, device, tokenizer):
     return avg_loss
 
 
-def checkpoint(output_dir, step, train_loss, model, device, eval_dataloader, scheduler, optimizer, tokenizer):
+def checkpoint(output_dir, writer, step, train_loss, model, device, eval_dataloader, scheduler, optimizer, tokenizer):
     print('Saving checkpoint')
     model.eval()
     eval_loss = eval(model, eval_dataloader, device, tokenizer)
     model.train()
 
     print(f"step #{step} train loss: {train_loss}, eval loss: {eval_loss}")
+    writer.add_scalar("Loss/train", train_loss)
+    writer.add_scalar("Loss/eval", eval_loss)
 
     ckpt = {
         'step': step,
@@ -131,6 +133,7 @@ def create_output_dirs(output_dir):
 def main(args):
     # TODO add graph of loss?
     create_output_dirs(args.output_dir)
+    writer = SummaryWriter(log_dir=args.output_dir)
 
     train_dataloader, eval_dataloader = create_dataloaders(args)
 
@@ -167,13 +170,13 @@ def main(args):
             outputs = model(**batch)
             loss = outputs[0] / args.gradient_accumulation_steps
             loss.backward()
-            #scheduler_wrap.step(virtual_epoch) FIXME
+            scheduler_wrap.step(virtual_epoch)
             if (steps + 1) % args.gradient_accumulation_steps == 0:
                 optimizer.step()
                 optimizer.zero_grad()
             if steps % args.save_checkpoints_steps == 0:
                 checkpoint(
-                    args.output_dir, steps, loss.item(),
+                    args.output_dir, writer, steps, loss.item(),
                     model, device, eval_dataloader,
                     scheduler_wrap, optimizer, tokenizer
                 )
@@ -189,6 +192,7 @@ def main(args):
         model, device, eval_dataloader,
         scheduler_wrap, optimizer, tokenizer
     )
+    writer.flush()
 
 
 if __name__ == '__main__':

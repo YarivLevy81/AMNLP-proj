@@ -6,5 +6,5 @@ python3 create_pretraining_data.py \
 --max_feature_length=512 \
 --masked_lm_prob=0.15 \
 --max_span_length=10 \
---tokenizer=t5-base \
+--tokenizer=t5-small \
 --cache_dir=/home/yandex/AMNLP2021/sehaik/hugginface_cache

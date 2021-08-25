@@ -18,7 +18,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_path", type=str, required=True)
     parser.add_argument("--output_path", type=str, required=True)
-    parser.add_argument("--tokenizer", type=str, default='t5-base', required=False)
+    parser.add_argument("--tokenizer", type=str, default='t5-small', required=False)
     parser.add_argument("--cache_dir", type=str, default=None, required=False)
     parser.add_argument("--tensor_length", type=int, default=512, required=False)
     parser.add_argument("--max_number_of_examples", type=int, default=-1, required=False)

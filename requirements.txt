@@ -1,0 +1,81 @@
+absl-py @ file:///home/conda/feedstock_root/build_artifacts/absl-py_1623774798911/work
+aiohttp @ file:///home/conda/feedstock_root/build_artifacts/aiohttp_1623682242266/work
+astunparse==1.6.3
+async-timeout==3.0.1
+attrs @ file:///home/conda/feedstock_root/build_artifacts/attrs_1620387926260/work
+blinker==1.4
+brotlipy==0.7.0
+cachetools==4.2.2
+certifi==2021.5.30
+cffi @ file:///tmp/build/80754af9/cffi_1625814693446/work
+chardet==4.0.0
+click==8.0.1
+cryptography @ file:///tmp/build/80754af9/cryptography_1616769182610/work
+datasets==1.11.0
+decorator==4.4.2
+dill @ file:///home/conda/feedstock_root/build_artifacts/dill_1623610058511/work
+filelock==3.0.12
+flatbuffers==1.12
+fsspec @ file:///home/conda/feedstock_root/build_artifacts/fsspec_1626188337504/work
+gast==0.4.0
+google-auth==1.34.0
+google-auth-oauthlib==0.4.4
+grpcio==1.34.1
+h5py==3.1.0
+huggingface-hub==0.0.12
+idna==2.10
+importlib-metadata @ file:///tmp/build/80754af9/importlib-metadata_1617877314848/work
+joblib==1.0.1
+keras-nightly==2.5.0.dev2021032900
+Markdown @ file:///home/conda/feedstock_root/build_artifacts/markdown_1614595805172/work
+mkl-fft==1.3.0
+mkl-random @ file:///tmp/build/80754af9/mkl_random_1626179032232/work
+mkl-service==2.4.0
+multidict @ file:///home/conda/feedstock_root/build_artifacts/multidict_1610319002430/work
+multiprocess @ file:///home/conda/feedstock_root/build_artifacts/multiprocess_1623774443521/work
+networkx==2.5.1
+numpy==1.19.5
+oauthlib==3.1.1
+olefile==0.46
+packaging==21.0
+pandas==1.3.1
+Pillow @ file:///tmp/build/80754af9/pillow_1625655818400/work
+protobuf==3.16.0
+pyarrow==4.0.0
+pyasn1==0.4.8
+pyasn1-modules==0.2.8
+pycparser @ file:///tmp/build/80754af9/pycparser_1594388511720/work
+PyJWT @ file:///home/conda/feedstock_root/build_artifacts/pyjwt_1619620644068/work
+pyOpenSSL @ file:///tmp/build/80754af9/pyopenssl_1608057966937/work
+pyparsing==2.4.7
+PySocks @ file:///tmp/build/80754af9/pysocks_1594394576006/work
+python-dateutil @ file:///home/conda/feedstock_root/build_artifacts/python-dateutil_1626286286081/work
+pytz @ file:///home/conda/feedstock_root/build_artifacts/pytz_1612179539967/work
+pyu2f @ file:///home/conda/feedstock_root/build_artifacts/pyu2f_1604248910016/work
+PyYAML==5.4.1
+regex==2021.7.6
+requests==2.25.1
+requests-oauthlib==1.3.0
+rsa==4.7.2
+sacremoses==0.0.45
+scikit-learn @ file:///home/conda/feedstock_root/build_artifacts/scikit-learn_1619628580290/work
+scipy @ file:///home/conda/feedstock_root/build_artifacts/scipy_1619561915310/work
+sentencepiece==0.1.96
+six==1.15.0
+tensorboard==2.5.0
+tensorboard-data-server==0.6.1
+tensorboard-plugin-wit==1.8.0
+tensorflow-estimator==2.5.0
+threadpoolctl @ file:///home/conda/feedstock_root/build_artifacts/threadpoolctl_1626092076920/work
+tokenizers==0.10.3
+torch==1.5.1
+torchvision==0.6.0a0+35d732a
+tqdm==4.61.2
+transformers==4.9.1
+typing-extensions==3.7.4.3
+urllib3==1.26.4
+warmup-scheduler @ git+https://github.com/ildoonet/pytorch-gradual-warmup-lr.git@6b5e8953a80aef5b324104dc0c2e9b8c34d622bd
+Werkzeug @ file:///home/conda/feedstock_root/build_artifacts/werkzeug_1621518206714/work
+xxhash @ file:///home/conda/feedstock_root/build_artifacts/python-xxhash_1618589909494/work
+yarl @ file:///home/conda/feedstock_root/build_artifacts/yarl_1625232903960/work
+zipp @ file:///tmp/build/80754af9/zipp_1625570634446/work

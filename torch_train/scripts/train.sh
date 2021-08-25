@@ -1,0 +1,11 @@
+python3 train.py \
+--train_dataset=/home/yandex/AMNLP2021/sehaik/torch_mrqa_datasets/squad/42-num-examples-32/data.pt \
+--eval_dataset=/home/yandex/AMNLP2021/sehaik/torch_mrqa_datasets/squad_dev/data.pt \
+--output_dir=/home/yandex/AMNLP2021/sehaik/torch_test/ \
+--cache_dir=/home/yandex/AMNLP2021/sehaik/huggingface_cache \
+--num_train_steps=100000 \
+--save_checkpoints_steps=20000 \
+--schedule_steps=10 \
+--gradient_accumulation_steps=1 \
+--print_loss_steps=10 \
+--from_pretrained=True

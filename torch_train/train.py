@@ -1,6 +1,9 @@
 import os
 import argparse
+import datetime
 
+import tensorflow.compat.v1 as tf
+from tqdm import tqdm
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from warmup_scheduler import GradualWarmupScheduler
@@ -35,6 +38,10 @@ def parse_args():
                         help='number of steps between optimizer steps')
     parser.add_argument('--eval_batch_size', type=int, default=1, required=False,
                         help='evaluation dataset batch size')
+    parser.add_argument('--skip_eval', type=bool, default=False, required=False,
+                        help='skip evaluation on checkpoint')
+    parser.add_argument('--skip_save', type=bool, default=False, required=False,
+                        help='skip saving the checkpoint')
     parser.add_argument('--learning_rate', type=float, default=1e-4, required=False,
                         help='initial learning rate')
     parser.add_argument('--num_train_steps', type=int, default=200000, required=False,
@@ -65,6 +72,7 @@ def create_dataloaders(args):
         shuffle=True,
         num_workers=args.num_workers
     )
+    tf.print(f'Created train dataset ({len(train_dataset)} examples)')
 
     eval_dataloader = torch.utils.data.DataLoader(
         dataset=eval_dataset,
@@ -72,13 +80,15 @@ def create_dataloaders(args):
         shuffle=False,
         num_workers=args.num_workers
     )
+    tf.print(f'Created eval dataset ({len(eval_dataset)} examples)')
 
     return train_dataloader, eval_dataloader
 
 # TODO add F1 score
 def eval(model, eval_dataloader, device, tokenizer):
+    tf.print('Evaluating')
     total_loss, count = 0.0, 0.0
-    for i, batch in enumerate(eval_dataloader):
+    for i, batch in enumerate(tqdm(eval_dataloader)):
         batch = {k: v.to(device) for k, v in batch.items()}
         outputs = model(**batch)
         loss = outputs[0]
@@ -90,32 +100,38 @@ def eval(model, eval_dataloader, device, tokenizer):
     return avg_loss
 
 
-def checkpoint(output_dir, writer, step, train_loss, model, device, eval_dataloader, scheduler, optimizer, tokenizer):
-    print('Saving checkpoint')
-    model.eval()
-    eval_loss = eval(model, eval_dataloader, device, tokenizer)
-    model.train()
+def checkpoint(output_dir, writer, step, train_loss, model,
+               device, eval_dataloader, scheduler, optimizer, tokenizer,
+               skip_eval, skip_save):
+    eval_loss = -1
+    if skip_eval == False:
+        model.eval()
+        eval_loss = eval(model, eval_dataloader, device, tokenizer)
+        model.train()
+        tf.print(f"step #{step} eval loss: {eval_loss}")
+        writer.add_scalar("Loss/eval", eval_loss, step)
 
-    print(f"step #{step} train loss: {train_loss}, eval loss: {eval_loss}")
-    writer.add_scalar("Loss/train", train_loss)
-    writer.add_scalar("Loss/eval", eval_loss)
+    tf.print(f"step #{step} train loss: {train_loss}")
+    writer.add_scalar("Loss/train", train_loss, step)
+    if skip_save == False:
+        tf.print('Saving checkpoint')
 
-    ckpt = {
-        'step': step,
-        'train_loss': train_loss,
-        'eval_loss': eval_loss,
-        'model': model.state_dict(),
-        'scheduler': scheduler.state_dict(),
-        'optimizer': optimizer.state_dict()
-    }
+        ckpt = {
+            'step': step,
+            'train_loss': train_loss,
+            'eval_loss': eval_loss,
+            'model': model.state_dict(),
+            'scheduler': scheduler.state_dict(),
+            'optimizer': optimizer.state_dict()
+        }
 
-    checkpoint_dir = os.path.join(output_dir, 'checkpoints')
-    checkpoint_path = os.path.join(checkpoint_dir, f'ckpt_{step}.pt')
-    torch.save(ckpt, checkpoint_path)
+        checkpoint_dir = os.path.join(output_dir, 'checkpoints')
+        checkpoint_path = os.path.join(checkpoint_dir, f'ckpt_{step}.pt')
+        torch.save(ckpt, checkpoint_path)
 
 
 def load_checkpoint(checkpoint_path, model, scheduler, optimizer):
-    print('Loading from checkpoint')
+    tf.print('Loading from checkpoint')
     ckpt = torch.load(checkpoint_path)
     model.load_state_dict(ckpt['model'])
     scheduler.load_state_dict(ckpt['scheduler']) # TODO - not sure this is okay! test it.
@@ -133,14 +149,16 @@ def create_output_dirs(output_dir):
 def main(args):
     # TODO add graph of loss?
     create_output_dirs(args.output_dir)
-    writer = SummaryWriter(log_dir=args.output_dir)
+    writer = SummaryWriter(log_dir=args.output_dir, max_queue=1)
 
     train_dataloader, eval_dataloader = create_dataloaders(args)
 
     tokenizer = AutoTokenizer.from_pretrained(args.config, cache_dir=args.cache_dir) # TODO use for F1 in eval
     if args.from_pretrained:
+        tf.print(f'Loading pretrained: {args.config}')
         model = T5ForConditionalGeneration.from_pretrained(args.config, cache_dir=args.cache_dir)
     else:
+        tf.print(f'Initializing random: {args.config}')
         t5config = AutoConfig.from_pretrained(args.config, cache_dir=args.cache_dir)
         model = T5ForConditionalGeneration(t5config)
 
@@ -148,19 +166,20 @@ def main(args):
     optimizer.zero_grad()
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
     warmup_steps = args.warmup_ratio * args.num_train_steps
-    total_epoch = int(warmup_steps / args.schedule_steps)
+    total_epoch = int(warmup_steps / args.schedule_steps) + 1 # cannot be 0
     scheduler_wrap = GradualWarmupScheduler(optimizer, multiplier=1, total_epoch=total_epoch, after_scheduler=scheduler)
 
     steps = 0
     if args.checkpoint:
         steps = load_checkpoint(args.checkpoint, model, scheduler_wrap, optimizer)
-    virtual_epoch = int(steps / args.schedule_steps)
+    virtual_epoch = int(steps / args.schedule_steps) + 1
+    scheduler_wrap.step(virtual_epoch) # not always correct..
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model.to(device)
     model.train()
 
-    print('Starting train loop')
+    tf.print('Starting train loop')
     while steps <= args.num_train_steps:
         for batch in train_dataloader:
             if steps >= args.num_train_steps:
@@ -170,7 +189,7 @@ def main(args):
             outputs = model(**batch)
             loss = outputs[0] / args.gradient_accumulation_steps
             loss.backward()
-            scheduler_wrap.step(virtual_epoch)
+
             if (steps + 1) % args.gradient_accumulation_steps == 0:
                 optimizer.step()
                 optimizer.zero_grad()
@@ -178,24 +197,30 @@ def main(args):
                 checkpoint(
                     args.output_dir, writer, steps, loss.item(),
                     model, device, eval_dataloader,
-                    scheduler_wrap, optimizer, tokenizer
+                    scheduler_wrap, optimizer, tokenizer,
+                    args.skip_eval, args.skip_save
                 )
+            if int(steps / args.schedule_steps) + 1 > virtual_epoch:
+                virtual_epoch = int(steps / args.schedule_steps) + 1
+                scheduler_wrap.step(virtual_epoch)
             if args.print_loss_steps and (steps + 1) % args.print_loss_steps == 0:
-                print(f"step: #{steps}, virtual_epoch: {virtual_epoch}, "
+                timestamp = datetime.datetime.now()
+                tf.print(f"{timestamp} step: #{steps}, virtual_epoch: {virtual_epoch}, "
                       f"train_loss: {loss.item()}, lr: {optimizer.param_groups[0]['lr']}")
             steps += 1
-            virtual_epoch = int(steps / args.schedule_steps)
 
-    print('Done Training')
+    tf.print('Done Training')
     checkpoint(
         args.output_dir, steps, 0,
         model, device, eval_dataloader,
-        scheduler_wrap, optimizer, tokenizer
+        scheduler_wrap, optimizer, tokenizer,
+        False, False
     )
     writer.flush()
 
 
 if __name__ == '__main__':
+    tf.print('Started')
     args = parse_args()
-    print('Started')
+    tf.print(args)
     main(args)

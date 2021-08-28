@@ -23,6 +23,8 @@ import pickle
 import numpy as np
 import torch
 
+import tensorflow.compat.v1 as tf
+
 from masking import create_recurring_span_selection_predictions
 import sys
 sys.path.append('../tokenization')
@@ -112,7 +114,7 @@ class DataStatistics:
 def write_instance_to_example_files(instances, tokenizer, tensor_length, output_files):
     """Create TF example files from `TrainingInstance`s."""
     total_written, total_tokens_written, skipped_instances = 0, 0, 0
-
+    examples = []
     for (inst_index, instance) in enumerate(instances):
         input_ids = tokenizer(" ".join(instance.tokens)).input_ids
         input_len = len(input_ids)

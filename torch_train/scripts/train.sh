@@ -4,9 +4,10 @@ python3 train.py \
 --output_dir=/home/yandex/AMNLP2021/sehaik/torch_test/ \
 --cache_dir=/home/yandex/AMNLP2021/sehaik/huggingface_cache \
 --num_train_steps=100000 \
---save_checkpoints_steps=20000 \
---schedule_steps=10 \
---gradient_accumulation_steps=1 \
+--save_checkpoints_steps=200 \
+--schedule_steps=64 \
+--gradient_accumulation_steps=8 \
 --print_loss_steps=10 \
---from_pretrained=True \
---config=t5-small
+--from_pretrained \
+--config=t5-small \
+--gamma=0.9999

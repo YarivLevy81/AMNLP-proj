@@ -1,10 +1,18 @@
 import torch
 import pandas as pd
+from glob import glob
 
 class SplinterDataset(torch.utils.data.Dataset):
     def __init__(self, data_file, columns=['input_ids', 'attention_mask', 'labels']):
-        data = torch.load(data_file)
+        data = self.get_data(data_file)
         self.df = pd.DataFrame(data, index=range(len(data)), columns=columns)
+
+    def get_data(self, data_file):
+        paths = glob(data_file)
+        data = []
+        for path in paths:
+            data.extend(torch.load(path))
+        return data
 
     def __len__(self):
         return len(self.df)

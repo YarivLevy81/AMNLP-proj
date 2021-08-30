@@ -38,16 +38,20 @@ def parse_args():
                         help='number of steps between optimizer steps')
     parser.add_argument('--eval_batch_size', type=int, default=1, required=False,
                         help='evaluation dataset batch size')
-    parser.add_argument('--skip_eval', type=bool, default=False, required=False,
+    parser.add_argument('--skip_eval', type=int, default=0, required=False,
                         help='skip evaluation on checkpoint')
-    parser.add_argument('--skip_save', type=bool, default=False, required=False,
-                        help='skip saving the checkpoint')
+    parser.add_argument('--save_best', type=int, default=1, required=False,
+                        help='skip evaluation on checkpoint')
+    parser.add_argument('--save_latest', type=int, default=1, required=False,
+                        help='skip evaluation on checkpoint')
+    parser.add_argument('--save_step', type=int, default=0, required=False,
+                        help='save a checkpoint for each step')
     parser.add_argument('--learning_rate', type=float, default=1e-4, required=False,
                         help='initial learning rate')
     parser.add_argument('--num_train_steps', type=int, default=200000, required=False,
                         help='number of training steps')
-    parser.add_argument('--warmup_ratio', type=float, default=0.1, required=False,
-                        help='precentage of warmup steps from training steps')
+    parser.add_argument('--warmup_steps', type=int, default=10000, required=False,
+                        help='number of warmup steps from training steps')
     parser.add_argument('--save_checkpoints_steps', type=int, default=1000, required=False,
                         help='number of steps between saving and evaluating checkpoints')
     parser.add_argument('--gamma', type=float, default=0.9, required=False,
@@ -85,7 +89,7 @@ def create_dataloaders(args):
     return train_dataloader, eval_dataloader
 
 # TODO add F1 score
-def eval(model, eval_dataloader, device, tokenizer):
+def eval(model, eval_dataloader, device):
     tf.print('Evaluating')
     total_loss, count = 0.0, 0.0
     for i, batch in enumerate(tqdm(eval_dataloader)):
@@ -101,34 +105,47 @@ def eval(model, eval_dataloader, device, tokenizer):
 
 
 def checkpoint(output_dir, writer, step, train_loss, model,
-               device, eval_dataloader, scheduler, optimizer, tokenizer,
-               skip_eval, skip_save):
-    eval_loss = -1
-    if skip_eval == False:
+               device, eval_dataloader, scheduler, optimizer,
+               best, args):
+    eval_loss = float('Inf')
+    if args.skip_eval == False:
         model.eval()
-        eval_loss = eval(model, eval_dataloader, device, tokenizer)
+        eval_loss = eval(model, eval_dataloader, device)
         model.train()
         tf.print(f"step #{step} eval loss: {eval_loss}")
         writer.add_scalar("Loss/eval", eval_loss, step)
 
     tf.print(f"step #{step} train loss: {train_loss}")
     writer.add_scalar("Loss/train", train_loss, step)
-    if skip_save == False:
+
+    ckpt = {
+        'step': step,
+        'best': best,
+        'train_loss': train_loss,
+        'eval_loss': eval_loss,
+        'model': model.state_dict(),
+        'scheduler': scheduler.state_dict(),
+        'optimizer': optimizer.state_dict()
+    }
+
+    checkpoint_dir = os.path.join(output_dir, 'checkpoints')
+    if args.save_best == 1 and eval_loss <= best:
+        tf.print('Saving best')
+        best = eval_loss
+        checkpoint_path = os.path.join(checkpoint_dir, f'best.pt')
+        torch.save(ckpt, checkpoint_path)
+
+    if args.save_latest == 1:
+        tf.print('Saving latest')
+        checkpoint_path = os.path.join(checkpoint_dir, f'latest.pt')
+        torch.save(ckpt, checkpoint_path)
+
+    if args.save_step == 1:
         tf.print('Saving checkpoint')
-
-        ckpt = {
-            'step': step,
-            'train_loss': train_loss,
-            'eval_loss': eval_loss,
-            'model': model.state_dict(),
-            'scheduler': scheduler.state_dict(),
-            'optimizer': optimizer.state_dict()
-        }
-
-        checkpoint_dir = os.path.join(output_dir, 'checkpoints')
         checkpoint_path = os.path.join(checkpoint_dir, f'ckpt_{step}.pt')
         torch.save(ckpt, checkpoint_path)
 
+    return best
 
 def load_checkpoint(checkpoint_path, model, scheduler, optimizer):
     tf.print('Loading from checkpoint')
@@ -137,7 +154,7 @@ def load_checkpoint(checkpoint_path, model, scheduler, optimizer):
     scheduler.load_state_dict(ckpt['scheduler']) # TODO - not sure this is okay! test it.
     optimizer.load_state_dict(ckpt['optimizer'])
 
-    return ckpt['step']
+    return ckpt['step'], ckpt['best']
 
 
 def create_output_dirs(output_dir):
@@ -153,7 +170,6 @@ def main(args):
 
     train_dataloader, eval_dataloader = create_dataloaders(args)
 
-    tokenizer = AutoTokenizer.from_pretrained(args.config, cache_dir=args.cache_dir) # TODO use for F1 in eval
     if args.from_pretrained:
         tf.print(f'Loading pretrained: {args.config}')
         model = T5ForConditionalGeneration.from_pretrained(args.config, cache_dir=args.cache_dir)
@@ -165,13 +181,13 @@ def main(args):
     optimizer = torch.optim.AdamW(params=model.parameters(), lr=args.learning_rate)
     optimizer.zero_grad()
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
-    warmup_steps = args.warmup_ratio * args.num_train_steps
-    total_epoch = int(warmup_steps / args.schedule_steps) + 1 # cannot be 0
+    total_epoch = int(args.warmup_steps / args.schedule_steps) + 1 # cannot be 0
     scheduler_wrap = GradualWarmupScheduler(optimizer, multiplier=1, total_epoch=total_epoch, after_scheduler=scheduler)
 
+    best = float('Inf')
     steps = 0
     if args.checkpoint:
-        steps = load_checkpoint(args.checkpoint, model, scheduler_wrap, optimizer)
+        steps, best = load_checkpoint(args.checkpoint, model, scheduler_wrap, optimizer)
     virtual_epoch = int(steps / args.schedule_steps) + 1
     scheduler_wrap.step(virtual_epoch) # not always correct..
 
@@ -194,11 +210,11 @@ def main(args):
                 optimizer.step()
                 optimizer.zero_grad()
             if steps % args.save_checkpoints_steps == 0:
-                checkpoint(
+                best = checkpoint(
                     args.output_dir, writer, steps, loss.item(),
                     model, device, eval_dataloader,
-                    scheduler_wrap, optimizer, tokenizer,
-                    args.skip_eval, args.skip_save
+                    scheduler_wrap, optimizer,
+                    best, args
                 )
             if int(steps / args.schedule_steps) + 1 > virtual_epoch:
                 virtual_epoch = int(steps / args.schedule_steps) + 1
@@ -210,12 +226,13 @@ def main(args):
             steps += 1
 
     tf.print('Done Training')
-    checkpoint(
+    best = checkpoint(
         args.output_dir, steps, 0,
         model, device, eval_dataloader,
-        scheduler_wrap, optimizer, tokenizer,
-        False, False
+        scheduler_wrap, optimizer,
+        best, args
     )
+    tf.print(f'Best Evalusation loss {best}')
     writer.flush()
 
 

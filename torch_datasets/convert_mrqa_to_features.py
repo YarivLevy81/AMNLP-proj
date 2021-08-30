@@ -7,6 +7,7 @@ import ntpath
 
 import pandas as pd
 import numpy as np
+import tensorflow.compat.v1 as tf
 import torch
 
 import sys
@@ -44,7 +45,7 @@ def create_example(input_ids, label_ids, tensor_length=512, label_ignore_id=-100
 
     if input_len > tensor_length or input_len != len(input_mask) or \
             len(label_ids) > tensor_length:
-        print("skipping...")
+        tf.print("skipping...")
         return None
 
     input_ids += [0] * (tensor_length - len(input_ids))
@@ -96,7 +97,7 @@ def process_file (data, tokenizer, number_of_examples, tensor_length=512, label_
 
 def main():
     args = get_args()
-    print(args)
+    tf.print(args)
 
     output_dir = os.path.split(args.output_path)[0]
 
@@ -107,7 +108,7 @@ def main():
     examples = []
     max_number_of_examples = args.max_number_of_examples
     for i, path in enumerate(tqdm(paths)):
-        print(f'process file {path}')
+        tf.print(f'process file {path}')
         data, header = read_mrqa(path)
         tokenizer = tokenization.Tokenizer(args.tokenizer, cache_dir=args.cache_dir)
         file_examples = process_file(data, tokenizer, max_number_of_examples, args.tensor_length, args.label_ignore_id)
@@ -115,9 +116,9 @@ def main():
         max_number_of_examples -= len(file_examples)
 
     assert (len(examples) > 0) # file should not be empty
-    print(f'saving {len(examples)} examples to {args.output_path}')
+    tf.print(f'saving {len(examples)} examples to {args.output_path}')
     torch.save(examples, args.output_path)
-    print('done')
+    tf.print('done')
 
 
 if __name__ == '__main__':

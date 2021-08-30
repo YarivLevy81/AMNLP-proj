@@ -133,3 +133,4 @@ test/pretrain_out/
 *.sh
 *.out
 *.err
+*.slurm

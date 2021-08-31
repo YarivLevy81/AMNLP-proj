@@ -69,26 +69,32 @@ def f1_score(prediction, ground_truth):
     return f1
 
 
-def calculate_metrics(args, model, tokenizer, dataloader):
+def calc_f1_of_batch(model, tokenizer, batch, do_print=False):
+    outputs = model.generate(input_ids=batch['input_ids'], attention_mask=batch['attention_mask'])
+    label = [x for x in batch['labels'][0] if x != -100]
+    label_text = tokenizer.decode(label, skip_special_tokens=True)
+    generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    exact_match = exact_match_score(label_text, generated_text)
+    score = f1_score(label_text, generated_text)
+    if do_print:
+        tf.print(f'Label: {label_text}')
+        tf.print(f'Generated: {generated_text}')
+        tf.print(f'F1 score: {score}')
+    return score, exact_match
+
+def calculate_metrics(model, tokenizer, dataloader):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model.to(device)
     model.eval()
 
-    total_score, total, exact_match = 0.0, 0.0, 0.0
+    total_score, total, total_exact_match = 0.0, 0.0, 0.0
     for i, batch in enumerate(dataloader):
         batch = {k: v.to(device) for k, v in batch.items()}
-        outputs = model.generate(input_ids=batch['input_ids'], attention_mask=batch['attention_mask'])
-        label = [x for x in batch['labels'][0] if x!=-100]
-        label_text = tokenizer.decode(label, skip_special_tokens=True)
-        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        exact_match += exact_match_score(label_text, generated_text)
-        score = f1_score(label_text, generated_text)
-        tf.print(f'Label: {label_text}')
-        tf.print(f'Generated: {generated_text}')
-        tf.print(f'F1 score: {score}')
+        score, exact_match = calc_f1_of_batch(model, tokenizer, batch, True)
         total_score += score
+        total_exact_match += exact_match
         total += 1
-    return total_score, exact_match, total
+    return total_score, total_exact_match, total
 
 
 def create_dataloader(dataset_path):
@@ -108,12 +114,13 @@ def load_checkpoint(checkpoint_path, model):
     tf.print('Loading from checkpoint')
     ckpt = torch.load(checkpoint_path)
     model.load_state_dict(ckpt['model'])
+    tf.print(f"checkpoint: step={ckpt['step']}, train_loss={ckpt['train_loss']}, eval_loss={ckpt['eval_loss']}")
 
 
 def eval(args, tokenizer, model, path):
     tf.print(f'Evaluating file with path: {path}')
     dataloader = create_dataloader(path)
-    metrics = calculate_metrics(args, model, tokenizer, dataloader)
+    metrics = calculate_metrics(model, tokenizer, dataloader)
     return metrics
 
 

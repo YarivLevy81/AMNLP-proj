@@ -18,7 +18,8 @@ import tokenization
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_path", type=str, required=True)
-    parser.add_argument("--output_path", type=str, required=True)
+    parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--prefix", type=str, default='data', required=False)
     parser.add_argument("--tokenizer", type=str, default='t5-small', required=False)
     parser.add_argument("--cache_dir", type=str, default=None, required=False)
     parser.add_argument("--tensor_length", type=int, default=512, required=False)
@@ -95,14 +96,18 @@ def process_file (data, tokenizer, number_of_examples, tensor_length=512, label_
 
     return file_examples
 
+def save(examples, output_dir, prefix):
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    tf.print(f'saving {len(examples)} examples to {output_dir}')
+    for i,e in enumerate(examples):
+        filepath = os.path.join(output_dir, f'{prefix}_{i}.pt')
+        torch.save(e, filepath)
+
 def main():
     args = get_args()
     tf.print(args)
-
-    output_dir = os.path.split(args.output_path)[0]
-
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
 
     paths = glob(args.input_path)
     examples = []
@@ -116,8 +121,7 @@ def main():
         max_number_of_examples -= len(file_examples)
 
     assert (len(examples) > 0) # file should not be empty
-    tf.print(f'saving {len(examples)} examples to {args.output_path}')
-    torch.save(examples, args.output_path)
+    save(examples, args.output_dir, args.prefix)
     tf.print('done')
 
 

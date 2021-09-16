@@ -25,7 +25,7 @@ def get_args():
     parser.add_argument("--input_path", type=str, required=True)
     parser.add_argument("--config", type=str, default='t5-small', required=False)
     parser.add_argument("--checkpoint", type=str, default=None, required=False)
-    parser.add_argument("--from_pretrained", type=bool, default=False, required=False)
+    parser.add_argument("--from_pretrained", type=int, default=0, required=False)
     parser.add_argument("--cache_dir", type=str, default=None, required=False)
     args = parser.parse_args()
     return args
@@ -117,36 +117,31 @@ def load_checkpoint(checkpoint_path, model):
     tf.print(f"checkpoint: step={ckpt['step']}, train_loss={ckpt['train_loss']}, eval_loss={ckpt['eval_loss']}")
 
 
-def eval(args, tokenizer, model, path):
-    tf.print(f'Evaluating file with path: {path}')
-    dataloader = create_dataloader(path)
+def eval(input_path, tokenizer, model):
+    tf.print(f'Evaluating file with path: {input_path}')
+    dataloader = create_dataloader(input_path)
     metrics = calculate_metrics(model, tokenizer, dataloader)
     return metrics
 
 
 def main(args):
     tokenizer = AutoTokenizer.from_pretrained(args.config, cache_dir=args.cache_dir)
-    if args.from_pretrained:
+    if args.from_pretrained==1:
         tf.print(f'Loading pretrained: {args.config}')
         model = T5ForConditionalGeneration.from_pretrained(args.config, cache_dir=args.cache_dir)
     else:
         tf.print(f'Initializing random: {args.config}')
         t5config = AutoConfig.from_pretrained(args.config, cache_dir=args.cache_dir)
         model = T5ForConditionalGeneration(t5config)
+        for param in model.parameters():
+            param.data = torch.normal(mean=0, std=1.0, size=param.size())
     if args.checkpoint:
         load_checkpoint(args.checkpoint, model)
 
-    paths = glob(args.input_path)
-    total_score, exact_match_total, total, avg_score, avg_match = 0.0 , 0.0, 0.0, 0.0, 0.0
-    tf.print('num of paths:', len(paths))
-    for path in tqdm(paths):
-        f1_score, exact_match, count = eval(path, tokenizer, model, path)
-        total_score += f1_score
-        exact_match_total += exact_match
-        total += count
-    if total:
+    total_score, total_exact_match, total = eval(args.input_path, tokenizer, model)
+    if total > 0:
         avg_score = 100 * total_score / total
-        avg_match = 100 * exact_match_total / total
+        avg_match = 100 * total_exact_match / total
     tf.print(f'\nAverage F1 score for files: {avg_score}')
     tf.print(f'Average of exact matches for files: {avg_match}')
 

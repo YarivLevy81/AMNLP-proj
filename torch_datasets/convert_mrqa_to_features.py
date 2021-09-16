@@ -69,30 +69,28 @@ def process_file (data, tokenizer, number_of_examples, tensor_length=512, label_
     file_examples = []
 
     for i, entry in tqdm(enumerate(data)):
+        entry_context = entry["context"]
         if number_of_examples == 0:
             break
 
-        context = entry["context"]
-        label = ""
-        j = 0
-
         for qa in entry["qas"]:
+            if number_of_examples == 0:
+                break
+
             question = qa["question"]
             answer = qa["answers"][0]
 
-            context += '</s> ' + question + f' <extra_id_{j}>'
-            label += f' <extra_id_{j}> '+answer
-            j+=1
+            context = entry_context + '</s> ' + question + f' <extra_id_0>'
+            label = f' <extra_id_0> '+answer +' <extra_id_1> '
 
-        label += f' <extra_id_{j}>'
-        ids = tokenizer(context).input_ids
-        label_ids = tokenizer(label).input_ids
-        new_example = create_example(ids, label_ids, tensor_length, label_ignore_id)
+            ids = tokenizer(context).input_ids
+            label_ids = tokenizer(label).input_ids
+            new_example = create_example(ids, label_ids, tensor_length, label_ignore_id)
 
-        if new_example == None:
-            continue
-        file_examples.append(new_example)
-        number_of_examples -= 1
+            if new_example == None:
+                continue
+            file_examples.append(new_example)
+            number_of_examples -= 1
 
     return file_examples
 
